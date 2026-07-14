@@ -48,8 +48,14 @@ public class EnergyImportCommandRunner {
 
         try {
             int imported = 0;
-            for (Path csvFile : importFiles()) {
-                imported += energyImportService.importCsv(csvFile);
+            List<Path> files = importFiles();
+            logger.info("Importing " + files.size() + " energy CSV file(s)");
+            for (int i = 0; i < files.size(); i++) {
+                Path csvFile = files.get(i);
+                logger.info("Importing CSV file " + (i + 1) + "/" + files.size() + ": " + csvFile);
+                int importedFromFile = energyImportService.importCsv(csvFile);
+                imported += importedFromFile;
+                logger.info("Imported " + importedFromFile + " energy points from " + csvFile.getFileName());
             }
             logger.info("Imported " + imported + " energy points");
             Quarkus.asyncExit(0);

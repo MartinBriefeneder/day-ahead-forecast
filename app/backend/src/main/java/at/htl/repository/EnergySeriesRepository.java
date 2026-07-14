@@ -5,7 +5,9 @@ import at.htl.model.EnergySeries;
 import com.influxdb.v3.client.InfluxDBClient;
 import com.influxdb.v3.client.Point;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -17,6 +19,12 @@ import java.util.stream.Stream;
 
 @ApplicationScoped
 public class EnergySeriesRepository {
+
+    private static final int WRITE_BATCH_SIZE = 1_000;
+    private static final int WRITE_PROGRESS_INTERVAL = 50_000;
+
+    @Inject
+    Logger logger;
 
     @ConfigProperty(name = "energy.influx.url")
     String influxUrl;
@@ -36,8 +44,12 @@ public class EnergySeriesRepository {
         }
 
         try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, tokenChars(), database)) {
-            for (EnergySeries item : series) {
-                client.writePoint(toPoint(item));
+            for (int start = 0; start < series.size(); start += WRITE_BATCH_SIZE) {
+                int end = Math.min(start + WRITE_BATCH_SIZE, series.size());
+                if (start == 0 || end == series.size() || end % WRITE_PROGRESS_INTERVAL == 0) {
+                    logger.info("Writing energy points " + (start + 1) + "-" + end + " of " + series.size() + " to InfluxDB");
+                }
+                client.writePoints(series.subList(start, end).stream().map(this::toPoint).toList());
             }
         }
     }
