@@ -23,7 +23,7 @@ cd ./backend
 ./mvnw -DskipTests package
 
 printf 'Importing CSV files from %s\n' "$IMPORT_DIR"
-java -Dquarkus.http.host=127.0.0.1 -Dquarkus.http.port=0 -Denergy.influx.database="$IMPORT_DATABASE" -Denergy.import.command.directory="$IMPORT_DIR" -jar target/quarkus-app/quarkus-run.jar
+java -Dquarkus.http.host=127.0.0.1 -Dquarkus.http.port=0 -Denergy.influx.token="$INFLUXDB_TOKEN" -Denergy.influx.database="$IMPORT_DATABASE" -Denergy.import.command.directory="$IMPORT_DIR" -jar target/quarkus-app/quarkus-run.jar
 
 LAST_TIME=$(docker exec influxdb influxdb3 query --database "$IMPORT_DATABASE" \
   --token "$INFLUXDB_TOKEN" \

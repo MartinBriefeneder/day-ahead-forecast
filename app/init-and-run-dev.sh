@@ -9,6 +9,16 @@ INFLUX_TOKEN_FILE="./influxdb/admin-token.json"
 INFLUXDB_TOKEN=$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INFLUX_TOKEN_FILE")
 export INFLUXDB_TOKEN
 
+mkdir -p ./influxdb-explorer/config
+cat > ./influxdb-explorer/config/config.json <<EOF
+{
+  "DEFAULT_INFLUX_SERVER": "http://influxdb:8181",
+  "DEFAULT_INFLUX_DATABASE": "$INFLUX_DATABASE",
+  "DEFAULT_API_TOKEN": "$INFLUXDB_TOKEN",
+  "DEFAULT_SERVER_NAME": "Local InfluxDB 3"
+}
+EOF
+
 docker compose down
 docker compose up -d
 
@@ -23,7 +33,7 @@ if [ -n "$POINT_COUNT" ] && [ "$POINT_COUNT" -gt 0 ]; then
   printf 'Skipping CSV import; %s already contains %s points.\n' "$INFLUX_TABLE" "$POINT_COUNT"
 else
   ./mvnw package
-  java -Denergy.import.command.directory="$IMPORT_CSV_DIRECTORY" -jar target/quarkus-app/quarkus-run.jar
+  java -Denergy.influx.token="$INFLUXDB_TOKEN" -Denergy.import.command.directory="$IMPORT_CSV_DIRECTORY" -jar target/quarkus-app/quarkus-run.jar
 fi
 
-./mvnw quarkus:dev
+./mvnw -Denergy.influx.token="$INFLUXDB_TOKEN" quarkus:dev
