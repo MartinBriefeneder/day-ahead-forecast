@@ -32,9 +32,19 @@ services:
     ports:
       - 3000:3000
     environment:
-         GF_SECURITY_ALLOW_EMBEDDING: "true"
-         GF_AUTH_ANONYMOUS_ENABLED: "true"
-         GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_FEATURE_TOGGLES_ENABLE: "newInfluxDSConfigPageDesign"
+    volumes:
+      - type: bind
+        source: ./grafana/provisioning
+        target: /etc/grafana/provisioning
+        read_only: true
+      - type: bind
+        source: ./grafana/dashboards
+        target: /var/lib/grafana/dashboards
+        read_only: true
 volumes:
   influxdb3-data:
   influxdb3-plugins:
