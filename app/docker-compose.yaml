@@ -14,12 +14,13 @@ services:
     command:
       - influxdb3
       - serve
+      - --admin-token-file=/var/lib/influxdb3/dev_admin-token.json
       - --node-id=node0
       - --object-store=file
       - --data-dir=/var/lib/influxdb3/data
       - --plugin-dir=/var/lib/influxdb3/plugins
       - --query-file-limit=20000
-      - --without-auth
+      - --disable-telemetry-upload
     volumes:
       - type: volume
         source: influxdb3-data
@@ -27,6 +28,9 @@ services:
       - type: volume
         source: influxdb3-plugins
         target: /var/lib/influxdb3/plugins
+      - type: bind
+        source: ./influxdb/dev_admin-token.json
+        target: /var/lib/influxdb3/dev_admin-token.json
   grafana:
     container_name: grafana
     image: grafana/grafana
