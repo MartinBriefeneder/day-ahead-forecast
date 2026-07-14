@@ -22,6 +22,10 @@ EOF
 docker compose down
 docker compose up -d
 
+until docker exec influxdb influxdb3 query --token "$INFLUXDB_TOKEN" --database _internal "SHOW TABLES" >/dev/null 2>&1; do
+  sleep 1
+done
+
 POINT_COUNT=$(docker exec influxdb influxdb3 query --token "$INFLUXDB_TOKEN" --database "$INFLUX_DATABASE" \
   "SELECT count(total) AS point_count FROM $INFLUX_TABLE" \
   --format json 2>/dev/null \
