@@ -15,6 +15,7 @@
       }
     ]
   },
+  "description": "Historical community-level generation and consumption totals from accounting CSV imports.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -29,18 +30,50 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "drawStyle": "line",
+            "drawStyle": "bars",
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 3,
-            "showPoints": "never"
+            "showPoints": "never",
+            "spanNulls": false
           },
           "unit": "kWh"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Generation"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Consumption"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 9,
+        "h": 10,
         "w": 24,
         "x": 0,
         "y": 0
@@ -48,7 +81,7 @@
       "id": 1,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": ["sum", "max"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -60,16 +93,27 @@
       },
       "targets": [
         {
+          "alias": "Generation",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT mean(\"total\") AS \"total\" FROM \"energy_series\" WHERE $timeFilter GROUP BY time(15m), \"direction\" fill(null)",
+          "query": "SELECT sum(\"total\") AS \"Generation\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "A"
+        },
+        {
+          "alias": "Consumption",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"total\") AS \"Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
         }
       ],
-      "title": "Total Energy By Direction",
+      "title": "Day View: Total Generation And Consumption",
       "type": "timeseries"
     },
     {
@@ -80,26 +124,28 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "drawStyle": "line",
+            "drawStyle": "bars",
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 3,
-            "showPoints": "never"
+            "showPoints": "never",
+            "spanNulls": false
           },
           "unit": "kWh"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 9,
+        "h": 8,
         "w": 12,
         "x": 0,
-        "y": 9
+        "y": 10
       },
       "id": 2,
       "options": {
         "legend": {
-          "displayMode": "list",
+          "calcs": ["sum"],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -110,16 +156,27 @@
       },
       "targets": [
         {
+          "alias": "Delivered To Community",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT mean(\"community_effective\") AS \"community_effective\" FROM \"energy_series\" WHERE $timeFilter GROUP BY time(15m), \"direction\" fill(null)",
+          "query": "SELECT sum(\"community_effective\") AS \"Delivered To Community\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "A"
+        },
+        {
+          "alias": "Consumed From Community",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"community_effective\") AS \"Consumed From Community\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
         }
       ],
-      "title": "Community Effective Energy",
+      "title": "Day View: Community-Effective Energy",
       "type": "timeseries"
     },
     {
@@ -130,26 +187,28 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "drawStyle": "line",
+            "drawStyle": "bars",
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 3,
-            "showPoints": "never"
+            "showPoints": "never",
+            "spanNulls": false
           },
           "unit": "kWh"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 9,
+        "h": 8,
         "w": 12,
         "x": 12,
-        "y": 9
+        "y": 10
       },
       "id": 3,
       "options": {
         "legend": {
-          "displayMode": "list",
+          "calcs": ["sum"],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -160,23 +219,97 @@
       },
       "targets": [
         {
+          "alias": "Residual Delivery",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT mean(\"residual\") AS \"residual\" FROM \"energy_series\" WHERE $timeFilter GROUP BY time(15m), \"direction\" fill(null)",
+          "query": "SELECT sum(\"residual\") AS \"Residual Delivery\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "A"
+        },
+        {
+          "alias": "Residual Consumption",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"residual\") AS \"Residual Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
         }
       ],
-      "title": "Residual Energy",
+      "title": "Day View: Residual Energy",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Daily Generation",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"total\") AS \"Daily Generation\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Daily Consumption",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"total\") AS \"Daily Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Month View: Daily Community Totals",
       "type": "timeseries"
     }
   ],
   "preload": false,
   "refresh": "",
   "schemaVersion": 41,
-  "tags": ["energy", "influxdb"],
+  "tags": ["energy", "community", "influxdb"],
   "templating": {
     "list": []
   },
@@ -184,10 +317,14 @@
     "from": "2025-06-01T00:00:00Z",
     "to": "2025-06-02T00:00:00Z"
   },
-  "timepicker": {},
+  "timepicker": {
+    "hidden": false,
+    "refresh_intervals": ["", "5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"],
+    "time_options": ["1d", "2d", "7d", "30d", "90d", "6M", "1y"]
+  },
   "timezone": "browser",
-  "title": "Energy Overview",
+  "title": "Energy Community Historical Overview",
   "uid": "energy-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
