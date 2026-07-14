@@ -100,13 +100,16 @@ public class EnergyCsvImportService {
                     continue;
                 }
 
-                Instant timestamp = parseTimestamp(columns[0], zoneId, rowNumber, diagnostics);
+                ParseTimestampResult timestampResult = parseTimestamp(columns[0], zoneId, rowNumber, diagnostics);
+                Instant timestamp = timestampResult == null ? null : timestampResult.timestamp();
                 if (timestamp == null) {
                     continue;
                 }
                 rowTimestamps.add(new RowTimestamp(rowNumber, LocalDateTime.parse(columns[0].trim(), TIMESTAMP_FORMAT), timestamp));
                 for (ColumnGroup group : groups) {
-                    recordDuplicateIfPresent(seenValues, rowNumber, timestamp, group, diagnostics);
+                    if (!timestampResult.ambiguous()) {
+                        recordDuplicateIfPresent(seenValues, rowNumber, timestamp, group, diagnostics);
+                    }
                     series.add(new EnergySeries(
                             group.identifier(),
                             timestamp,
@@ -168,7 +171,7 @@ public class EnergyCsvImportService {
         return null;
     }
 
-    private Instant parseTimestamp(String value, ZoneId zoneId, int rowNumber, List<CsvValidationDiagnostic> diagnostics) {
+    private ParseTimestampResult parseTimestamp(String value, ZoneId zoneId, int rowNumber, List<CsvValidationDiagnostic> diagnostics) {
         LocalDateTime localDateTime;
         try {
             localDateTime = LocalDateTime.parse(value.trim(), TIMESTAMP_FORMAT);
@@ -195,6 +198,7 @@ public class EnergyCsvImportService {
 
         ZoneRules rules = zoneId.getRules();
         List<ZoneOffset> offsets = rules.getValidOffsets(localDateTime);
+        boolean ambiguous = false;
         if (offsets.isEmpty()) {
             diagnostics.add(CsvValidationDiagnostic.warning(
                     "Timestamp falls into a daylight-saving gap",
@@ -204,6 +208,7 @@ public class EnergyCsvImportService {
                     value
             ));
         } else if (offsets.size() > 1) {
+            ambiguous = true;
             diagnostics.add(CsvValidationDiagnostic.warning(
                     "Timestamp is ambiguous because of a daylight-saving overlap",
                     rowNumber,
@@ -213,7 +218,7 @@ public class EnergyCsvImportService {
             ));
         }
 
-        return localDateTime.atZone(zoneId).toInstant();
+        return new ParseTimestampResult(localDateTime.atZone(zoneId).toInstant(), ambiguous);
     }
 
     private double parseNumber(String[] columns, int column, int rowNumber, String[] labels, Instant timestamp, List<CsvValidationDiagnostic> diagnostics) {
@@ -243,7 +248,7 @@ public class EnergyCsvImportService {
     }
 
     private void recordDuplicateIfPresent(Set<String> seenValues, int rowNumber, Instant timestamp, ColumnGroup group, List<CsvValidationDiagnostic> diagnostics) {
-        String key = timestamp + "|" + group.identifier() + "|" + group.direction();
+        String key = timestamp + "|" + group.identifier() + "|" + group.direction() + "|" + group.totalColumn();
         if (!seenValues.add(key)) {
             diagnostics.add(CsvValidationDiagnostic.error(
                     "Duplicate timestamp and data column value",
@@ -293,5 +298,8 @@ public class EnergyCsvImportService {
     }
 
     private record RowTimestamp(int rowNumber, LocalDateTime localDateTime, Instant timestamp) {
+    }
+
+    private record ParseTimestampResult(Instant timestamp, boolean ambiguous) {
     }
 }
