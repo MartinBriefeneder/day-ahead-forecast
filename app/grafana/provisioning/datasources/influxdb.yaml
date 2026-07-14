@@ -1,0 +1,19 @@
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB Energy
+    uid: influxdb-energy
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8181
+    isDefault: true
+    database: energy
+    user: grafana
+    jsonData:
+      dbName: energy
+      httpMode: POST
+      version: InfluxQL
+      product: InfluxDB OSS
+    secureJsonData:
+      password: grafana
+    editable: true
