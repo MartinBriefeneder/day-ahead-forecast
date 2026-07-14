@@ -14,7 +14,7 @@ services:
     command:
       - influxdb3
       - serve
-      - --admin-token-file=/var/lib/influxdb3/dev_admin-token.json
+      - --admin-token-file=/var/lib/influxdb3/admin-token.json
       - --node-id=node0
       - --object-store=file
       - --data-dir=/var/lib/influxdb3/data
@@ -29,8 +29,10 @@ services:
         source: influxdb3-plugins
         target: /var/lib/influxdb3/plugins
       - type: bind
-        source: ./influxdb/dev_admin-token.json
-        target: /var/lib/influxdb3/dev_admin-token.json
+        source: ./influxdb/admin-token.json
+        target: /var/lib/influxdb3/admin-token.json
+    secrets:
+      - admin-token
   grafana:
     container_name: grafana
     image: grafana/grafana
@@ -53,3 +55,6 @@ services:
 volumes:
   influxdb3-data:
   influxdb3-plugins:
+secrets:
+  admin-token:
+    file: influxdb/admin-token.json
