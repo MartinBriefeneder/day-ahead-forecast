@@ -6,6 +6,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 import java.nio.file.Path;
 import java.util.Optional;
@@ -14,7 +15,9 @@ import java.util.Optional;
 public class EnergyImportCommandRunner {
 
     @Inject
-    EnergyImportService energyImportService;
+    ImportService energyImportService;
+    @Inject
+    Logger logger;
 
     @ConfigProperty(name = "energy.import.command.file")
     Optional<String> importFile;
@@ -27,7 +30,7 @@ public class EnergyImportCommandRunner {
         try {
             Path csvFile = Path.of(importFile.get());
             int imported = energyImportService.importCsv(csvFile);
-            System.out.println("Imported " + imported + " energy points from " + csvFile);
+            logger.info("Imported " + imported + " energy points from " + csvFile);
             Quarkus.asyncExit(0);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to import energy CSV: " + importFile.get(), e);
