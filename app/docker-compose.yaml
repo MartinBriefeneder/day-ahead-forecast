@@ -18,6 +18,7 @@ services:
       - --object-store=file
       - --data-dir=/var/lib/influxdb3/data
       - --plugin-dir=/var/lib/influxdb3/plugins
+      - --query-file-limit=20000
       - --without-auth
     volumes:
       - type: volume
