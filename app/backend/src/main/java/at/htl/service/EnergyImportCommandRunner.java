@@ -22,7 +22,7 @@ public class EnergyImportCommandRunner {
     @ConfigProperty(name = "energy.import.command.file")
     Optional<String> importFile;
 
-    void importAndExit(@Observes StartupEvent event) {
+    void importCsv(@Observes StartupEvent event) {
         if (importFile.isEmpty()) {
             return;
         }
