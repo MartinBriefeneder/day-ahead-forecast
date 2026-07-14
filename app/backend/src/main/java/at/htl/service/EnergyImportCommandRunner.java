@@ -15,7 +15,7 @@ import java.util.Optional;
 public class EnergyImportCommandRunner {
 
     @Inject
-    ImportService energyImportService;
+    EnergyImportService energyImportService;
     @Inject
     Logger logger;
 

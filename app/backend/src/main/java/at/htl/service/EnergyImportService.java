@@ -1,10 +1,10 @@
 package at.htl.service;
 
 import at.htl.model.EnergySeries;
+import at.htl.repository.EnergySeriesRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -15,11 +15,11 @@ public class EnergyImportService {
     EnergyCsvImportService csvImportService;
 
     @Inject
-    InfluxDbWriteService influxDbWriteService;
+    EnergySeriesRepository influxDbEnergySeriesRepository;
 
-    public int importCsv(Path csvFile) throws IOException, InterruptedException {
+    public int importCsv(Path csvFile) throws Exception {
         List<EnergySeries> series = csvImportService.parse(csvFile);
-        influxDbWriteService.write(series);
+        influxDbEnergySeriesRepository.saveAll(series);
         return series.size();
     }
 }

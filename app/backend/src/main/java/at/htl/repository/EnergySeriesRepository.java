@@ -1,4 +1,4 @@
-package at.htl.service;
+package at.htl.repository;
 
 import at.htl.model.DirectionType;
 import at.htl.model.EnergySeries;
@@ -16,7 +16,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 @ApplicationScoped
-public class InfluxDbService {
+public class EnergySeriesRepository {
 
     @ConfigProperty(name = "energy.influx.url")
     String influxUrl;
@@ -30,7 +30,7 @@ public class InfluxDbService {
     @ConfigProperty(name = "energy.influx.token")
     Optional<String> token;
 
-    public void write(List<EnergySeries> series) throws Exception {
+    public void saveAll(List<EnergySeries> series) throws Exception {
         if (series.isEmpty()) {
             return;
         }
@@ -42,7 +42,7 @@ public class InfluxDbService {
         }
     }
 
-    public List<EnergySeries> query(String identifier, DirectionType direction, Instant from, Instant to, int limit) throws Exception {
+    public List<EnergySeries> find(String identifier, DirectionType direction, Instant from, Instant to, int limit) throws Exception {
         if (limit <= 0 || limit > 10_000) {
             throw new IllegalArgumentException("limit must be between 1 and 10000");
         }
