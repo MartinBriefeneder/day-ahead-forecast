@@ -43,6 +43,7 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
       GF_FEATURE_TOGGLES_ENABLE: "newInfluxDSConfigPageDesign"
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?INFLUXDB_TOKEN must be exported before starting Grafana}
     volumes:
       - type: bind
         source: ./grafana/provisioning

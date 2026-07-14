@@ -14,6 +14,7 @@ datasources:
       httpMode: POST
       version: InfluxQL
       product: InfluxDB OSS
+      httpHeaderName1: Authorization
     secureJsonData:
-      password: grafana
+      httpHeaderValue1: Token ${INFLUXDB_TOKEN}
     editable: true
