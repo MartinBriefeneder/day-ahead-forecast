@@ -59,7 +59,7 @@ services:
     command:
       - --mode=admin
     ports:
-      - 127.0.0.1:8081:8081
+      - 127.0.0.1:8180:8080
     volumes:
       - type: bind
         source: ./influxdb-explorer/config
