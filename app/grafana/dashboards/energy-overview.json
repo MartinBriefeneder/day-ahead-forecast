@@ -29,6 +29,202 @@
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "fixedColor": "#F59E0B",
+            "mode": "fixed"
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "alias": "Generation",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"total\") AS \"Generation\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY'",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Selected Period Generation",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#2563EB",
+            "mode": "fixed"
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "alias": "Consumption",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"total\") AS \"Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION'",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Selected Period Consumption",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#16A34A",
+            "mode": "fixed"
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "alias": "Community Delivery",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"community_effective\") AS \"Community Delivery\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY'",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Energy Shared In Community",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#7C3AED",
+            "mode": "fixed"
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 8,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "alias": "Grid Import",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"residual\") AS \"Grid Import\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION'",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Residual Grid Import",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
           "custom": {
             "drawStyle": "bars",
             "lineInterpolation": "linear",
@@ -49,7 +245,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "green",
+                  "fixedColor": "#F59E0B",
                   "mode": "fixed"
                 }
               }
@@ -64,7 +260,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "blue",
+                  "fixedColor": "#2563EB",
                   "mode": "fixed"
                 }
               }
@@ -76,7 +272,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 4
       },
       "id": 1,
       "options": {
@@ -113,7 +309,7 @@
           "refId": "B"
         }
       ],
-      "title": "Day View: Total Generation And Consumption",
+      "title": "Quarter-Hour Total Generation And Consumption",
       "type": "timeseries"
     },
     {
@@ -139,7 +335,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 10
+        "y": 14
       },
       "id": 2,
       "options": {
@@ -176,7 +372,7 @@
           "refId": "B"
         }
       ],
-      "title": "Day View: Community-Effective Energy",
+      "title": "Quarter-Hour Community-Effective Energy",
       "type": "timeseries"
     },
     {
@@ -202,7 +398,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 10
+        "y": 14
       },
       "id": 3,
       "options": {
@@ -219,27 +415,27 @@
       },
       "targets": [
         {
-          "alias": "Residual Delivery",
+          "alias": "Residual Export",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"residual\") AS \"Residual Delivery\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
+          "query": "SELECT sum(\"residual\") AS \"Residual Export\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "A"
         },
         {
-          "alias": "Residual Consumption",
+          "alias": "Residual Import",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"residual\") AS \"Residual Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
+          "query": "SELECT sum(\"residual\") AS \"Residual Import\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "B"
         }
       ],
-      "title": "Day View: Residual Energy",
+      "title": "Quarter-Hour Residual Import And Export",
       "type": "timeseries"
     },
     {
@@ -265,7 +461,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 22
       },
       "id": 4,
       "options": {
@@ -302,7 +498,133 @@
           "refId": "B"
         }
       ],
-      "title": "Month View: Daily Community Totals",
+      "title": "Daily Total Generation And Consumption",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Daily Community Delivery",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"community_effective\") AS \"Daily Community Delivery\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Daily Community Consumption",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"community_effective\") AS \"Daily Community Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Daily Community-Effective Energy",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Daily Residual Export",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"residual\") AS \"Daily Residual Export\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Daily Residual Import",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"residual\") AS \"Daily Residual Import\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Daily Residual Import And Export",
       "type": "timeseries"
     }
   ],
@@ -315,7 +637,7 @@
   },
   "time": {
     "from": "2025-06-01T00:00:00Z",
-    "to": "2025-06-02T00:00:00Z"
+    "to": "2025-07-01T00:00:00Z"
   },
   "timepicker": {
     "hidden": false,
@@ -325,6 +647,6 @@
   "timezone": "browser",
   "title": "Energy Community Historical Overview",
   "uid": "energy-overview",
-  "version": 2,
+  "version": 7,
   "weekStart": ""
 }
