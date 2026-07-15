@@ -15,7 +15,7 @@ public class EnergySeriesService {
     @Inject
     EnergySeriesRepository energySeriesRepository;
 
-    public List<EnergySeries> find(String identifier, DirectionType direction, Instant from, Instant to, int limit) throws Exception {
-        return energySeriesRepository.find(identifier, direction, from, to, limit);
+    public List<EnergySeries> find(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) throws Exception {
+        return energySeriesRepository.find(meteringPoint, direction, from, to, limit);
     }
 }

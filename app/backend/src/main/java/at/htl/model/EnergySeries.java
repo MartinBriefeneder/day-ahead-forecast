@@ -2,6 +2,5 @@ package at.htl.model;
 
 import java.time.Instant;
 
-public record EnergySeries(String identifier, Instant timestamp, DirectionType energyDirection, double total, double community_effective, double residual) {
+public record EnergySeries(String meteringPoint, Instant timestamp, DirectionType direction, double total, double communityEffective, double residual) {
 }
-

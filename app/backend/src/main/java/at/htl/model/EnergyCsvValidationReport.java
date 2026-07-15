@@ -10,22 +10,27 @@ public record EnergyCsvValidationReport(
         long seriesCount,
         long errorCount,
         long warningCount,
-        Set<String> identifiers,
-        Set<DirectionType> directions
+        Set<String> meteringPoints,
+        Set<String> categories,
+        Set<DirectionType> directions,
+        List<CsvValidationDiagnostic> crossFileDiagnostics
 ) {
     public boolean hasErrors() {
-        return errorCount > 0;
+        return errorCount > 0 || crossFileDiagnostics.stream().anyMatch(CsvValidationDiagnostic::isError);
     }
 
     public record FileSummary(
             Path file,
+            long dataRowCount,
             long seriesCount,
             long errorCount,
             long warningCount,
             Instant firstTimestamp,
             Instant lastTimestamp,
-            Set<String> identifiers,
+            Set<String> meteringPoints,
+            Set<String> categories,
             Set<DirectionType> directions,
+            List<String> structuralFingerprint,
             List<CsvValidationDiagnostic> diagnostics
     ) {
     }

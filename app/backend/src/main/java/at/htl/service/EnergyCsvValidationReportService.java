@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,14 +38,19 @@ public class EnergyCsvValidationReportService {
         List<EnergyCsvValidationReport.FileSummary> summaries = files.stream()
                 .map(this::validateFile)
                 .toList();
+        List<CsvValidationDiagnostic> crossFileDiagnostics = crossFileDiagnostics(summaries);
 
         return new EnergyCsvValidationReport(
                 summaries,
                 summaries.stream().mapToLong(EnergyCsvValidationReport.FileSummary::seriesCount).sum(),
-                summaries.stream().mapToLong(EnergyCsvValidationReport.FileSummary::errorCount).sum(),
-                summaries.stream().mapToLong(EnergyCsvValidationReport.FileSummary::warningCount).sum(),
-                summaries.stream().flatMap(summary -> summary.identifiers().stream()).collect(java.util.stream.Collectors.toCollection(TreeSet::new)),
-                summaries.stream().flatMap(summary -> summary.directions().stream()).collect(java.util.stream.Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Enum::name))))
+                summaries.stream().mapToLong(EnergyCsvValidationReport.FileSummary::errorCount).sum()
+                        + crossFileDiagnostics.stream().filter(CsvValidationDiagnostic::isError).count(),
+                summaries.stream().mapToLong(EnergyCsvValidationReport.FileSummary::warningCount).sum()
+                        + crossFileDiagnostics.stream().filter(diagnostic -> !diagnostic.isError()).count(),
+                summaries.stream().flatMap(summary -> summary.meteringPoints().stream()).collect(java.util.stream.Collectors.toCollection(TreeSet::new)),
+                summaries.stream().flatMap(summary -> summary.categories().stream()).collect(java.util.stream.Collectors.toCollection(TreeSet::new)),
+                summaries.stream().flatMap(summary -> summary.directions().stream()).collect(java.util.stream.Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Enum::name)))),
+                crossFileDiagnostics
         );
     }
 
@@ -63,15 +69,36 @@ public class EnergyCsvValidationReportService {
         markdown.append("- Series parsed: ").append(report.seriesCount()).append('\n');
         markdown.append("- Errors: ").append(report.errorCount()).append('\n');
         markdown.append("- Warnings: ").append(report.warningCount()).append('\n');
-        markdown.append("- Metering points: ").append(report.identifiers().size()).append('\n');
+        markdown.append("- Metering points: ").append(report.meteringPoints().size()).append('\n');
+        markdown.append("- Categories: ").append(report.categories().size()).append('\n');
         markdown.append("- Directions: ").append(report.directions()).append("\n\n");
 
+        markdown.append("## Categories\n\n");
+        if (report.categories().isEmpty()) {
+            markdown.append("No categories found.\n\n");
+        } else {
+            for (String category : report.categories()) {
+                markdown.append("- `").append(category).append("`\n");
+            }
+            markdown.append('\n');
+        }
+
         markdown.append("## Metering Points\n\n");
-        if (report.identifiers().isEmpty()) {
+        if (report.meteringPoints().isEmpty()) {
             markdown.append("No metering points found.\n\n");
         } else {
-            for (String identifier : report.identifiers()) {
-                markdown.append("- `").append(identifier).append("`\n");
+            for (String meteringPoint : report.meteringPoints()) {
+                markdown.append("- `").append(meteringPoint).append("`\n");
+            }
+            markdown.append('\n');
+        }
+
+        markdown.append("## Cross-File Validation\n\n");
+        if (report.crossFileDiagnostics().isEmpty()) {
+            markdown.append("- No cross-file date-range or structural issues detected.\n\n");
+        } else {
+            for (Map.Entry<String, Long> diagnostic : groupedDiagnostics(report.crossFileDiagnostics()).entrySet()) {
+                markdown.append("- ").append(diagnostic.getValue()).append("x ").append(diagnostic.getKey()).append('\n');
             }
             markdown.append('\n');
         }
@@ -80,6 +107,7 @@ public class EnergyCsvValidationReportService {
         for (EnergyCsvValidationReport.FileSummary file : report.files()) {
             markdown.append("### ").append(file.file().getFileName()).append("\n\n");
             markdown.append("- Path: `").append(file.file()).append("`\n");
+            markdown.append("- Data rows parsed: ").append(file.dataRowCount()).append('\n');
             markdown.append("- Series parsed: ").append(file.seriesCount()).append('\n');
             markdown.append("- Errors: ").append(file.errorCount()).append('\n');
             markdown.append("- Warnings: ").append(file.warningCount()).append('\n');
@@ -87,7 +115,8 @@ public class EnergyCsvValidationReportService {
             markdown.append("- First timestamp (UTC instant): ").append(formatInstant(file.firstTimestamp())).append('\n');
             markdown.append("- Last timestamp (local): ").append(formatLocalTimestamp(file.lastTimestamp())).append('\n');
             markdown.append("- Last timestamp (UTC instant): ").append(formatInstant(file.lastTimestamp())).append('\n');
-            markdown.append("- Metering points: ").append(file.identifiers().size()).append('\n');
+            markdown.append("- Metering points: ").append(file.meteringPoints().size()).append('\n');
+            markdown.append("- Categories: ").append(file.categories()).append('\n');
             markdown.append("- Directions: ").append(file.directions()).append("\n\n");
 
             if (!file.diagnostics().isEmpty()) {
@@ -100,6 +129,62 @@ public class EnergyCsvValidationReportService {
         }
 
         return markdown.toString();
+    }
+
+    private List<CsvValidationDiagnostic> crossFileDiagnostics(List<EnergyCsvValidationReport.FileSummary> summaries) {
+        List<CsvValidationDiagnostic> diagnostics = new ArrayList<>();
+        List<EnergyCsvValidationReport.FileSummary> ordered = summaries.stream()
+                .filter(summary -> summary.firstTimestamp() != null && summary.lastTimestamp() != null)
+                .sorted(Comparator.comparing(EnergyCsvValidationReport.FileSummary::firstTimestamp))
+                .toList();
+
+        for (int index = 1; index < ordered.size(); index++) {
+            EnergyCsvValidationReport.FileSummary previous = ordered.get(index - 1);
+            EnergyCsvValidationReport.FileSummary current = ordered.get(index);
+            Instant expectedStart = previous.lastTimestamp().plusSeconds(15 * 60);
+            if (current.firstTimestamp().isAfter(expectedStart)) {
+                diagnostics.add(CsvValidationDiagnostic.warning(
+                        "Cross-file date-range gap",
+                        null,
+                        null,
+                        current.firstTimestamp(),
+                        previous.file().getFileName() + " -> " + current.file().getFileName() + ", expected=" + expectedStart
+                ));
+            } else if (current.firstTimestamp().isBefore(expectedStart)) {
+                diagnostics.add(CsvValidationDiagnostic.warning(
+                        "Cross-file date-range overlap",
+                        null,
+                        null,
+                        current.firstTimestamp(),
+                        previous.file().getFileName() + " -> " + current.file().getFileName() + ", expected=" + expectedStart
+                ));
+            }
+        }
+
+        if (!ordered.isEmpty()) {
+            EnergyCsvValidationReport.FileSummary reference = ordered.getFirst();
+            for (EnergyCsvValidationReport.FileSummary summary : ordered.subList(1, ordered.size())) {
+                if (!summary.categories().equals(reference.categories())) {
+                    diagnostics.add(CsvValidationDiagnostic.warning(
+                            "Category set differs from reference file",
+                            null,
+                            summary.file().getFileName().toString(),
+                            null,
+                            "reference=" + reference.file().getFileName()
+                    ));
+                }
+                if (!summary.structuralFingerprint().equals(reference.structuralFingerprint())) {
+                    diagnostics.add(CsvValidationDiagnostic.warning(
+                            "Column structure differs from reference file",
+                            null,
+                            summary.file().getFileName().toString(),
+                            null,
+                            "reference=" + reference.file().getFileName()
+                    ));
+                }
+            }
+        }
+        return diagnostics;
     }
 
     private Map<String, Long> groupedDiagnostics(List<CsvValidationDiagnostic> diagnostics) {
@@ -131,18 +216,21 @@ public class EnergyCsvValidationReportService {
             List<EnergySeries> series = result.series();
             return new EnergyCsvValidationReport.FileSummary(
                     file,
+                    result.dataRowCount(),
                     series.size(),
                     result.diagnostics().stream().filter(CsvValidationDiagnostic::isError).count(),
                     result.diagnostics().stream().filter(diagnostic -> !diagnostic.isError()).count(),
                     series.stream().map(EnergySeries::timestamp).min(Instant::compareTo).orElse(null),
                     series.stream().map(EnergySeries::timestamp).max(Instant::compareTo).orElse(null),
-                    series.stream().map(EnergySeries::identifier).collect(java.util.stream.Collectors.toCollection(TreeSet::new)),
-                    series.stream().map(EnergySeries::energyDirection).collect(java.util.stream.Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Enum::name)))),
+                    series.stream().map(EnergySeries::meteringPoint).collect(java.util.stream.Collectors.toCollection(TreeSet::new)),
+                    result.categories().stream().collect(java.util.stream.Collectors.toCollection(TreeSet::new)),
+                    series.stream().map(EnergySeries::direction).collect(java.util.stream.Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Enum::name)))),
+                    result.structuralFingerprint(),
                     result.diagnostics()
             );
         } catch (IOException e) {
             CsvValidationDiagnostic diagnostic = CsvValidationDiagnostic.error("Failed to read CSV file: " + e.getMessage(), null, null, null, file.toString());
-            return new EnergyCsvValidationReport.FileSummary(file, 0, 1, 0, null, null, Set.of(), Set.of(), List.of(diagnostic));
+            return new EnergyCsvValidationReport.FileSummary(file, 0, 0, 1, 0, null, null, Set.of(), Set.of(), Set.of(), List.of(), List.of(diagnostic));
         }
     }
 

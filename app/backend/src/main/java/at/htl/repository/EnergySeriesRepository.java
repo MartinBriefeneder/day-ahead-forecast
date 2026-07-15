@@ -36,7 +36,7 @@ public class EnergySeriesRepository {
     String measurement;
 
     @ConfigProperty(name = "energy.influx.token")
-    String token;
+    Optional<String> token;
 
     @ConfigProperty(name = "energy.influx.write-batch-size", defaultValue = "10000")
     int writeBatchSize;
@@ -46,7 +46,7 @@ public class EnergySeriesRepository {
             return;
         }
 
-        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, token.toCharArray(), database)) {
+        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database)) {
             int batchSize = resolvedWriteBatchSize();
             List<Point> batch = new ArrayList<>(batchSize);
             for (int start = 0; start < series.size(); start += batchSize) {
@@ -67,22 +67,22 @@ public class EnergySeriesRepository {
         return writeBatchSize > 0 ? writeBatchSize : DEFAULT_WRITE_BATCH_SIZE;
     }
 
-    public List<EnergySeries> find(String identifier, DirectionType direction, Instant from, Instant to, int limit) throws Exception {
+    public List<EnergySeries> find(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) throws Exception {
         if (limit <= 0 || limit > 10_000) {
             throw new IllegalArgumentException("limit must be between 1 and 10000");
         }
 
-        String sql = buildSql(identifier, direction, from, to, limit);
-        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, token.toCharArray(), database);
+        String sql = buildSql(meteringPoint, direction, from, to, limit);
+        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database);
              Stream<Object[]> stream = client.query(sql)) {
             return stream.map(this::toEnergySeries).toList();
         }
     }
 
-    String buildSql(String identifier, DirectionType direction, Instant from, Instant to, int limit) {
+    String buildSql(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) {
         List<String> conditions = new ArrayList<>();
-        if (identifier != null && !identifier.isBlank()) {
-            conditions.add("identifier = '" + escapeSqlLiteral(identifier) + "'");
+        if (meteringPoint != null && !meteringPoint.isBlank()) {
+            conditions.add("metering_point = '" + escapeSqlLiteral(meteringPoint) + "'");
         }
         if (direction != null) {
             conditions.add("direction = '" + direction.name() + "'");
@@ -95,7 +95,7 @@ public class EnergySeriesRepository {
         }
 
         StringBuilder sql = new StringBuilder()
-                .append("SELECT time, identifier, direction, total, community_effective, residual FROM ")
+                .append("SELECT time, metering_point, direction, total, community_effective, residual FROM ")
                 .append(quoteIdentifier(measurement));
         if (!conditions.isEmpty()) {
             sql.append(" WHERE ").append(String.join(" AND ", conditions));
@@ -104,12 +104,17 @@ public class EnergySeriesRepository {
         return sql.toString();
     }
 
+    private String resolvedToken() {
+        return token.filter(value -> !value.isBlank())
+                .orElseThrow(() -> new IllegalStateException("energy.influx.token must be configured for InfluxDB access"));
+    }
+
     private Point toPoint(EnergySeries series) {
         return Point.measurement(measurement)
-                .setTag("identifier", series.identifier())
-                .setTag("direction", series.energyDirection().name())
+                .setTag("metering_point", series.meteringPoint())
+                .setTag("direction", series.direction().name())
                 .setField("total", series.total())
-                .setField("community_effective", series.community_effective())
+                .setField("community_effective", series.communityEffective())
                 .setField("residual", series.residual())
                 .setTimestamp(series.timestamp());
     }

@@ -21,7 +21,7 @@ class EnergyImportServiceTest {
     @Test
     void importLogsDiagnosticsAndDoesNotMutateInput() throws Exception {
         String content = """
-                Zeitpunkt;Bezug total;Bezug community;Bezug residual
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
                 1.6.2025, 00:00:00;abc;1;0
                 """;

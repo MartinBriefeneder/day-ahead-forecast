@@ -24,7 +24,7 @@ class EnergyCsvImportServiceTest {
     @Test
     void validCsvProducesSeriesWithoutDiagnostics() throws IOException {
         EnergyCsvImportResult result = service.parse(csv("""
-                Zeitpunkt;Bezug total;Bezug community;Bezug residual
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
                 1.6.2025, 00:00:00;1,25;0,50;0,75
                 1.6.2025, 00:15:00;2;1;1
@@ -36,9 +36,22 @@ class EnergyCsvImportServiceTest {
     }
 
     @Test
+    void validDeliveryCsvProducesDeliverySeries() throws IOException {
+        EnergyCsvImportResult result = service.parse(csv("""
+                Zeitpunkt;Gesamtlieferung [kWh];Effektiv an Gemeinschaft geliefert [kWh];Restlieferung [kWh]
+                ;AT001;AT001;AT001
+                1.6.2025, 00:00:00;1,25;0,50;0,75
+                """));
+
+        assertTrue(result.diagnostics().isEmpty());
+        assertEquals(1, result.series().size());
+        assertEquals(at.htl.model.DirectionType.DELIVERY, result.series().getFirst().direction());
+    }
+
+    @Test
     void parsesCsvTimestampsAsViennaLocalTime() throws IOException {
         EnergyCsvImportResult result = service.parse(csv("""
-                Zeitpunkt;Bezug total;Bezug community;Bezug residual
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
                 1.6.2025, 00:00:00;1;1;0
                 1.1.2026, 00:00:00;1;1;0
@@ -51,7 +64,7 @@ class EnergyCsvImportServiceTest {
     @Test
     void invalidStructureIsReported() throws IOException {
         EnergyCsvImportResult missingTimestamp = service.parse(csv("""
-                Time;Bezug total;Bezug community;Bezug residual
+                Time;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
                 1.6.2025, 00:00:00;1;1;0
                 """));
@@ -71,7 +84,7 @@ class EnergyCsvImportServiceTest {
     @Test
     void invalidRowsAreReportedWithLocationContext() throws IOException {
         EnergyCsvImportResult result = service.parse(csv("""
-                Zeitpunkt;Bezug total;Bezug community;Bezug residual
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
                 invalid;1;1;0
                 1.6.2025, 00:10:00;1;1;0
@@ -96,13 +109,13 @@ class EnergyCsvImportServiceTest {
     @Test
     void duplicateValuesAndDaylightSavingAnomaliesAreReported() throws IOException {
         EnergyCsvImportResult duplicate = service.parse(csv("""
-                Zeitpunkt;Bezug total;Bezug community;Bezug residual
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
                 1.6.2025, 00:00:00;1;1;0
                 1.6.2025, 00:00:00;2;1;1
                 """));
         EnergyCsvImportResult daylightSaving = service.parse(csv("""
-                Zeitpunkt;Bezug total;Bezug community;Bezug residual
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
                 30.3.2025, 02:15:00;1;1;0
                 """), ZoneId.of("Europe/Vienna"));
@@ -111,6 +124,73 @@ class EnergyCsvImportServiceTest {
                 diagnostic.message().contains("Duplicate")));
         assertTrue(daylightSaving.diagnostics().stream().anyMatch(diagnostic ->
                 diagnostic.message().contains("daylight-saving")));
+    }
+
+    @Test
+    void missingIntervalsAndOrderingDeviationsAreReported() throws IOException {
+        EnergyCsvImportResult result = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                1.6.2025, 00:00:00;1;1;0
+                1.6.2025, 00:30:00;1;1;0
+                1.6.2025, 00:15:00;1;1;0
+                """));
+
+        assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("Missing quarter-hour")));
+        assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("Timestamp ordering deviation")));
+    }
+
+    @Test
+    void reportsNegativeValuesAndRowLengthDifferences() throws IOException {
+        EnergyCsvImportResult result = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                1.6.2025, 00:00:00;-1;1
+                """));
+
+        assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("Negative interval value")));
+        assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("Data row length differs")));
+    }
+
+    @Test
+    void invalidCategorySequenceAndMeteringPointMismatchAreReported() throws IOException {
+        EnergyCsvImportResult invalidCategory = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Restbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh]
+                ;AT001;AT001;AT001
+                1.6.2025, 00:00:00;1;1;0
+                """));
+        EnergyCsvImportResult mismatchedMeteringPoint = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT999;AT001
+                1.6.2025, 00:00:00;1;1;0
+                """));
+
+        assertTrue(invalidCategory.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("Unexpected community-effective category")));
+        assertTrue(mismatchedMeteringPoint.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("Inconsistent metering point")));
+    }
+
+    @Test
+    void duplicateColumnCombinationsAndNoDataRowsAreReported() throws IOException {
+        EnergyCsvImportResult duplicateColumn = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh];Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001;AT001;AT001;AT001
+                1.6.2025, 00:00:00;1;1;0;1;1;0
+                """));
+        EnergyCsvImportResult noDataRows = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                """));
+
+        assertTrue(duplicateColumn.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("Duplicate category/metering-point")));
+        assertTrue(noDataRows.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("no data rows")));
     }
 
     private Path csv(String content) throws IOException {
