@@ -36,14 +36,14 @@ public class EnergySeriesRepository {
     String measurement;
 
     @ConfigProperty(name = "energy.influx.token")
-    Optional<String> token;
+    String token;
 
     public void saveAll(List<EnergySeries> series) throws Exception {
         if (series.isEmpty()) {
             return;
         }
 
-        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, tokenChars(), database)) {
+        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, token.toCharArray(), database)) {
             for (int start = 0; start < series.size(); start += WRITE_BATCH_SIZE) {
                 int end = Math.min(start + WRITE_BATCH_SIZE, series.size());
                 if (start == 0 || end == series.size() || end % WRITE_PROGRESS_INTERVAL == 0) {
@@ -60,7 +60,7 @@ public class EnergySeriesRepository {
         }
 
         String sql = buildSql(identifier, direction, from, to, limit);
-        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, tokenChars(), database);
+        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, token.toCharArray(), database);
              Stream<Object[]> stream = client.query(sql)) {
             return stream.map(this::toEnergySeries).toList();
         }
@@ -104,7 +104,7 @@ public class EnergySeriesRepository {
     private EnergySeries toEnergySeries(Object[] row) {
         return new EnergySeries(
                 String.valueOf(row[1]),
-                parseInfluxTime(row[0]),
+                parseTime(row[0]),
                 DirectionType.valueOf(String.valueOf(row[2])),
                 ((Number) row[3]).doubleValue(),
                 ((Number) row[4]).doubleValue(),
@@ -112,7 +112,7 @@ public class EnergySeriesRepository {
         );
     }
 
-    private Instant parseInfluxTime(Object value) {
+    private Instant parseTime(Object value) {
         if (value instanceof Instant instant) {
             return instant;
         }
@@ -121,12 +121,6 @@ public class EnergySeriesRepository {
             return Instant.parse(text);
         }
         return LocalDateTime.parse(text).toInstant(ZoneOffset.UTC);
-    }
-
-    private char[] tokenChars() {
-        return token.filter(value -> !value.isBlank())
-                .map(String::toCharArray)
-                .orElse(null);
     }
 
     private String quoteIdentifier(String value) {
