@@ -19,7 +19,7 @@ services:
       - --object-store=file
       - --data-dir=/var/lib/influxdb3/data
       - --plugin-dir=/var/lib/influxdb3/plugins
-      - --query-file-limit=20000
+      - --query-file-limit=35000
       - --disable-telemetry-upload
     volumes:
       - type: volume
@@ -45,6 +45,9 @@ services:
       GF_FEATURE_TOGGLES_ENABLE: "newInfluxDSConfigPageDesign"
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?INFLUXDB_TOKEN must be exported before starting Grafana}
     volumes:
+      - type: volume
+        source: grafana-data
+        target: /var/lib/grafana
       - type: bind
         source: ./grafana/provisioning
         target: /etc/grafana/provisioning
@@ -74,6 +77,7 @@ volumes:
   influxdb3-data:
   influxdb3-plugins:
   influxdb3-explorer-db:
+  grafana-data:
 secrets:
   admin-token:
     file: influxdb/admin-token.json
