@@ -107,6 +107,33 @@ class EnergyCsvImportServiceTest {
     }
 
     @Test
+    void reportsMissingHeaderRowsUnknownCategoriesAndMalformedNumericValues() throws IOException {
+        EnergyCsvImportResult missingHeaderRow = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh]
+                """));
+        EnergyCsvImportResult unknownCategory = service.parse(csv("""
+                Zeitpunkt;Unbekannte Kategorie [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                1.6.2025, 00:00:00;1;1;0
+                """));
+        EnergyCsvImportResult malformedNumber = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                1.6.2025, 00:00:00;not-a-number;1;0
+                """));
+
+        assertTrue(missingHeaderRow.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("two header rows")));
+        assertTrue(unknownCategory.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("Cannot determine energy direction")
+                        && diagnostic.rawValue().contains("Unbekannte Kategorie")));
+        assertTrue(malformedNumber.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("Invalid numeric")
+                        && diagnostic.rowNumber() == 3
+                        && diagnostic.rawValue().equals("not-a-number")));
+    }
+
+    @Test
     void duplicateValuesAndDaylightSavingAnomaliesAreReported() throws IOException {
         EnergyCsvImportResult duplicate = service.parse(csv("""
                 Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
@@ -122,6 +149,9 @@ class EnergyCsvImportServiceTest {
 
         assertTrue(duplicate.diagnostics().stream().anyMatch(diagnostic ->
                 diagnostic.message().contains("Duplicate")));
+        assertEquals(2, duplicate.diagnostics().stream()
+                .filter(diagnostic -> diagnostic.message().contains("Duplicate timestamp"))
+                .count());
         assertTrue(daylightSaving.diagnostics().stream().anyMatch(diagnostic ->
                 diagnostic.message().contains("daylight-saving")));
     }
@@ -137,9 +167,37 @@ class EnergyCsvImportServiceTest {
                 """));
 
         assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
-                diagnostic.message().contains("Missing quarter-hour")));
+                diagnostic.message().contains("Missing quarter-hour")
+                        && diagnostic.rawValue().contains("missing=2025-06-01T00:15")));
         assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
                 diagnostic.message().contains("Timestamp ordering deviation")));
+    }
+
+    @Test
+    void reportsDstSpringGapAutumnOverlapAndNoDiagnosticOutsideTransitions() throws IOException {
+        EnergyCsvImportResult springGap = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                30.3.2025, 02:15:00;1;1;0
+                """), ZoneId.of("Europe/Vienna"));
+        EnergyCsvImportResult autumnOverlap = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                26.10.2025, 02:15:00;1;1;0
+                """), ZoneId.of("Europe/Vienna"));
+        EnergyCsvImportResult nonTransition = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                1.6.2025, 00:00:00;1;1;0
+                1.6.2025, 00:15:00;1;1;0
+                """), ZoneId.of("Europe/Vienna"));
+
+        assertTrue(springGap.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("daylight-saving gap")));
+        assertTrue(autumnOverlap.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("daylight-saving overlap")));
+        assertTrue(nonTransition.diagnostics().stream().noneMatch(diagnostic ->
+                diagnostic.message().contains("daylight-saving")));
     }
 
     @Test

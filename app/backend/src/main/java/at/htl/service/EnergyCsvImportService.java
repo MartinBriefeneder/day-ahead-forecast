@@ -91,7 +91,7 @@ public class EnergyCsvImportService {
                 ));
             }
 
-            Set<String> seenValues = new HashSet<>();
+            java.util.Map<LocalDateTime, List<Integer>> timestampRows = new java.util.LinkedHashMap<>();
             List<RowTimestamp> rowTimestamps = new ArrayList<>();
             long dataRowCount = 0;
 
@@ -130,11 +130,10 @@ public class EnergyCsvImportService {
                 if (timestamp == null) {
                     continue;
                 }
-                rowTimestamps.add(new RowTimestamp(rowNumber, LocalDateTime.parse(columns[0].trim(), TIMESTAMP_FORMAT), timestamp, timestampResult.ambiguous()));
+                LocalDateTime localDateTime = LocalDateTime.parse(columns[0].trim(), TIMESTAMP_FORMAT);
+                rowTimestamps.add(new RowTimestamp(rowNumber, localDateTime, timestamp, timestampResult.ambiguous()));
+                timestampRows.computeIfAbsent(localDateTime, ignored -> new ArrayList<>()).add(rowNumber);
                 for (ColumnGroup group : groups) {
-                    if (!timestampResult.ambiguous()) {
-                        recordDuplicateIfPresent(seenValues, rowNumber, timestamp, group, diagnostics);
-                    }
                     series.add(new EnergySeries(
                             group.meteringPoint(),
                             timestamp,
@@ -145,6 +144,8 @@ public class EnergyCsvImportService {
                     ));
                 }
             }
+
+            reportDuplicateTimestamps(timestampRows, diagnostics);
 
             if (dataRowCount == 0) {
                 diagnostics.add(CsvValidationDiagnostic.error(
@@ -431,16 +432,19 @@ public class EnergyCsvImportService {
         }
     }
 
-    private void recordDuplicateIfPresent(Set<String> seenValues, int rowNumber, Instant timestamp, ColumnGroup group, List<CsvValidationDiagnostic> diagnostics) {
-        String key = timestamp + "|" + group.meteringPoint() + "|" + group.direction() + "|" + group.totalColumn();
-        if (!seenValues.add(key)) {
-            diagnostics.add(CsvValidationDiagnostic.error(
-                    "Duplicate timestamp and data column value",
-                    rowNumber,
-                    group.meteringPoint(),
-                    timestamp,
-                    null
-            ));
+    private void reportDuplicateTimestamps(java.util.Map<LocalDateTime, List<Integer>> timestampRows, List<CsvValidationDiagnostic> diagnostics) {
+        for (java.util.Map.Entry<LocalDateTime, List<Integer>> entry : timestampRows.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                for (Integer rowNumber : entry.getValue()) {
+                    diagnostics.add(CsvValidationDiagnostic.error(
+                            "Duplicate timestamp in CSV file",
+                            rowNumber,
+                            "Zeitpunkt",
+                            null,
+                            "timestamp=" + entry.getKey() + ", rows=" + entry.getValue()
+                    ));
+                }
+            }
         }
     }
 
@@ -472,12 +476,15 @@ public class EnergyCsvImportService {
             }
 
             if (interval.toMinutes() > 15 && interval.toMinutes() % 15 == 0) {
+                LocalDateTime firstMissing = previous.localDateTime().plusMinutes(15);
+                LocalDateTime lastMissing = current.localDateTime().minusMinutes(15);
                 diagnostics.add(CsvValidationDiagnostic.warning(
                         "Missing quarter-hour interval(s)",
                         current.rowNumber(),
                         "Zeitpunkt",
                         current.timestamp(),
                         "previous=" + previous.localDateTime() + ", current=" + current.localDateTime()
+                                + ", missing=" + (firstMissing.equals(lastMissing) ? firstMissing : firstMissing + ".." + lastMissing)
                 ));
             }
         }

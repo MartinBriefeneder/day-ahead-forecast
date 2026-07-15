@@ -56,6 +56,7 @@ class EnergyCsvValidationReportServiceTest {
         assertTrue(report.hasErrors());
         assertEquals(2, report.errorCount());
         assertTrue(service.toMarkdown(report).contains("No importable data columns"));
+        assertTrue(service.toMarkdown(report).contains("Diagnostic Details"));
     }
 
     @Test

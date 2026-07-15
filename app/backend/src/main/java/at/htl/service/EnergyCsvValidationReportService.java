@@ -124,6 +124,10 @@ public class EnergyCsvValidationReportService {
                 for (Map.Entry<String, Long> diagnostic : groupedDiagnostics(file.diagnostics()).entrySet()) {
                     markdown.append("- ").append(diagnostic.getValue()).append("x ").append(diagnostic.getKey()).append('\n');
                 }
+                markdown.append("\nDiagnostic Details:\n\n");
+                for (CsvValidationDiagnostic diagnostic : file.diagnostics()) {
+                    markdown.append("- ").append(formatDiagnostic(diagnostic)).append('\n');
+                }
                 markdown.append('\n');
             }
         }
@@ -200,6 +204,23 @@ public class EnergyCsvValidationReportService {
             grouped.merge(key, 1L, Long::sum);
         }
         return grouped;
+    }
+
+    private String formatDiagnostic(CsvValidationDiagnostic diagnostic) {
+        StringBuilder text = new StringBuilder(diagnostic.severity() + ": " + diagnostic.message());
+        if (diagnostic.rowNumber() != null) {
+            text.append(" row=").append(diagnostic.rowNumber());
+        }
+        if (diagnostic.columnName() != null) {
+            text.append(" column=`").append(diagnostic.columnName()).append('`');
+        }
+        if (diagnostic.timestamp() != null) {
+            text.append(" timestamp=").append(diagnostic.timestamp());
+        }
+        if (diagnostic.rawValue() != null) {
+            text.append(" raw=`").append(diagnostic.rawValue()).append('`');
+        }
+        return text.toString();
     }
 
     private String formatInstant(Instant timestamp) {
