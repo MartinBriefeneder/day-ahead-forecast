@@ -37,6 +37,8 @@ class EnergyCsvValidationReportServiceTest {
         String markdown = Files.readString(output);
         assertTrue(markdown.contains("# Energy CSV Validation Report"));
         assertTrue(markdown.contains("- Files checked: 2"));
+        assertTrue(markdown.contains("- First timestamp (local): 2025-06-01 00:00:00 Europe/Vienna"));
+        assertTrue(markdown.contains("- First timestamp (UTC instant): 2025-05-31T22:00:00Z"));
         assertTrue(markdown.contains("### a.csv"));
         assertTrue(markdown.contains("### b.csv"));
     }

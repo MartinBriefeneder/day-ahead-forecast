@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,6 +32,20 @@ class EnergyCsvImportServiceTest {
 
         assertTrue(result.diagnostics().isEmpty());
         assertEquals(2, result.series().size());
+        assertEquals(Instant.parse("2025-05-31T22:00:00Z"), result.series().getFirst().timestamp());
+    }
+
+    @Test
+    void parsesCsvTimestampsAsViennaLocalTime() throws IOException {
+        EnergyCsvImportResult result = service.parse(csv("""
+                Zeitpunkt;Bezug total;Bezug community;Bezug residual
+                ;AT001;AT001;AT001
+                1.6.2025, 00:00:00;1;1;0
+                1.1.2026, 00:00:00;1;1;0
+                """));
+
+        assertEquals(Instant.parse("2025-05-31T22:00:00Z"), result.series().get(0).timestamp());
+        assertEquals(Instant.parse("2025-12-31T23:00:00Z"), result.series().get(1).timestamp());
     }
 
     @Test

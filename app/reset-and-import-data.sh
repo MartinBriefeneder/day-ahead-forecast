@@ -4,7 +4,7 @@ set -eu
 INFLUX_DATABASE="energy"
 IMPORT_DATABASE="energy_import"
 IMPORT_DIR="../../data/raw/csv_Archiv_6_2025_bis_5_2026"
-EXPECTED_LAST_TIME="2026-05-31T21:45:00"
+EXPECTED_LAST_TIME="2026-05-31T19:45:00"
 INFLUX_TOKEN_FILE="./influxdb/admin-token.json"
 
 INFLUXDB_TOKEN=$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INFLUX_TOKEN_FILE")

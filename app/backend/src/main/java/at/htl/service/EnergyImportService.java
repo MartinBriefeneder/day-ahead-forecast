@@ -18,7 +18,7 @@ public class EnergyImportService {
     EnergyCsvImportService csvImportService;
 
     @Inject
-    EnergySeriesRepository influxDbEnergySeriesRepository;
+    EnergySeriesRepository energySeriesRepository;
 
     @Inject
     Logger logger;
@@ -32,7 +32,7 @@ public class EnergyImportService {
         }
 
         List<EnergySeries> series = result.series();
-        influxDbEnergySeriesRepository.saveAll(series);
+        energySeriesRepository.saveAll(series);
         return series.size();
     }
 

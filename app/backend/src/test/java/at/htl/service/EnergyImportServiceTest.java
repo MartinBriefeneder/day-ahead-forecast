@@ -30,7 +30,7 @@ class EnergyImportServiceTest {
 
         EnergyImportService service = new EnergyImportService();
         setField(service, "csvImportService", new EnergyCsvImportService());
-        setField(service, "influxDbEnergySeriesRepository", new EnergySeriesRepository());
+        setField(service, "energySeriesRepository", new EnergySeriesRepository());
         setField(service, "logger", Logger.getLogger(EnergyImportService.class));
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> service.importCsv(csv));

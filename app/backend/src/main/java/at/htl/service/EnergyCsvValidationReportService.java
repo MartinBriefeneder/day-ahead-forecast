@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,6 +22,9 @@ import java.util.TreeSet;
 
 @ApplicationScoped
 public class EnergyCsvValidationReportService {
+
+    private static final ZoneId REPORT_ZONE = ZoneId.of("Europe/Vienna");
+    private static final DateTimeFormatter REPORT_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss VV");
 
     private final EnergyCsvImportService csvImportService;
 
@@ -78,8 +83,10 @@ public class EnergyCsvValidationReportService {
             markdown.append("- Series parsed: ").append(file.seriesCount()).append('\n');
             markdown.append("- Errors: ").append(file.errorCount()).append('\n');
             markdown.append("- Warnings: ").append(file.warningCount()).append('\n');
-            markdown.append("- First timestamp: ").append(file.firstTimestamp() == null ? "n/a" : file.firstTimestamp()).append('\n');
-            markdown.append("- Last timestamp: ").append(file.lastTimestamp() == null ? "n/a" : file.lastTimestamp()).append('\n');
+            markdown.append("- First timestamp (local): ").append(formatLocalTimestamp(file.firstTimestamp())).append('\n');
+            markdown.append("- First timestamp (UTC instant): ").append(formatInstant(file.firstTimestamp())).append('\n');
+            markdown.append("- Last timestamp (local): ").append(formatLocalTimestamp(file.lastTimestamp())).append('\n');
+            markdown.append("- Last timestamp (UTC instant): ").append(formatInstant(file.lastTimestamp())).append('\n');
             markdown.append("- Metering points: ").append(file.identifiers().size()).append('\n');
             markdown.append("- Directions: ").append(file.directions()).append("\n\n");
 
@@ -108,6 +115,14 @@ public class EnergyCsvValidationReportService {
             grouped.merge(key, 1L, Long::sum);
         }
         return grouped;
+    }
+
+    private String formatInstant(Instant timestamp) {
+        return timestamp == null ? "n/a" : timestamp.toString();
+    }
+
+    private String formatLocalTimestamp(Instant timestamp) {
+        return timestamp == null ? "n/a" : REPORT_TIMESTAMP_FORMAT.format(timestamp.atZone(REPORT_ZONE));
     }
 
     private EnergyCsvValidationReport.FileSummary validateFile(Path file) {
