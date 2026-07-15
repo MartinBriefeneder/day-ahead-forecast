@@ -11,6 +11,7 @@ import org.jboss.logging.Logger;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -47,6 +48,7 @@ public class EnergyImportCommandRunner {
         }
 
         try {
+            long started = System.nanoTime();
             int imported = 0;
             List<Path> files = importFiles();
             logger.info("Importing " + files.size() + " energy CSV file(s)");
@@ -57,11 +59,15 @@ public class EnergyImportCommandRunner {
                 imported += importedFromFile;
                 logger.info("Imported " + importedFromFile + " energy points from " + csvFile.getFileName());
             }
-            logger.info("Imported " + imported + " energy points");
+            logger.info("Imported " + imported + " energy points in " + formatDuration(Duration.ofNanos(System.nanoTime() - started)));
             Quarkus.asyncExit(0);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to import energy CSV input", e);
         }
+    }
+
+    private String formatDuration(Duration duration) {
+        return duration.toMillis() + " ms";
     }
 
     private void validateCsv() {

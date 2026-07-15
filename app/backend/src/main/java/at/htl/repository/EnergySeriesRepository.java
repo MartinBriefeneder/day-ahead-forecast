@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 @ApplicationScoped
 public class EnergySeriesRepository {
 
-    private static final int WRITE_BATCH_SIZE = 1_000;
+    private static final int DEFAULT_WRITE_BATCH_SIZE = 10_000;
     private static final int WRITE_PROGRESS_INTERVAL = 50_000;
 
     @Inject
@@ -38,20 +38,33 @@ public class EnergySeriesRepository {
     @ConfigProperty(name = "energy.influx.token")
     String token;
 
+    @ConfigProperty(name = "energy.influx.write-batch-size", defaultValue = "10000")
+    int writeBatchSize;
+
     public void saveAll(List<EnergySeries> series) throws Exception {
         if (series.isEmpty()) {
             return;
         }
 
         try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, token.toCharArray(), database)) {
-            for (int start = 0; start < series.size(); start += WRITE_BATCH_SIZE) {
-                int end = Math.min(start + WRITE_BATCH_SIZE, series.size());
+            int batchSize = resolvedWriteBatchSize();
+            List<Point> batch = new ArrayList<>(batchSize);
+            for (int start = 0; start < series.size(); start += batchSize) {
+                int end = Math.min(start + batchSize, series.size());
                 if (start == 0 || end == series.size() || end % WRITE_PROGRESS_INTERVAL == 0) {
                     logger.info("Writing energy points " + (start + 1) + "-" + end + " of " + series.size() + " to InfluxDB");
                 }
-                client.writePoints(series.subList(start, end).stream().map(this::toPoint).toList());
+                batch.clear();
+                for (int index = start; index < end; index++) {
+                    batch.add(toPoint(series.get(index)));
+                }
+                client.writePoints(batch);
             }
         }
+    }
+
+    int resolvedWriteBatchSize() {
+        return writeBatchSize > 0 ? writeBatchSize : DEFAULT_WRITE_BATCH_SIZE;
     }
 
     public List<EnergySeries> find(String identifier, DirectionType direction, Instant from, Instant to, int limit) throws Exception {

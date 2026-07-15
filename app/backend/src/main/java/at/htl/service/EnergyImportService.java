@@ -9,6 +9,7 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 
 @ApplicationScoped
@@ -24,7 +25,9 @@ public class EnergyImportService {
     Logger logger;
 
     public int importCsv(Path csvFile) throws Exception {
+        long started = System.nanoTime();
         EnergyCsvImportResult result = csvImportService.parse(csvFile);
+        Duration parseDuration = Duration.ofNanos(System.nanoTime() - started);
         logDiagnostics(result.diagnostics());
 
         if (result.hasErrors()) {
@@ -32,8 +35,20 @@ public class EnergyImportService {
         }
 
         List<EnergySeries> series = result.series();
+        long writeStarted = System.nanoTime();
         energySeriesRepository.saveAll(series);
+        Duration writeDuration = Duration.ofNanos(System.nanoTime() - writeStarted);
+        Duration totalDuration = Duration.ofNanos(System.nanoTime() - started);
+        logger.info("Imported " + series.size()
+                + " energy points from " + csvFile.getFileName()
+                + " in " + formatDuration(totalDuration)
+                + " (parse=" + formatDuration(parseDuration)
+                + ", write=" + formatDuration(writeDuration) + ")");
         return series.size();
+    }
+
+    private String formatDuration(Duration duration) {
+        return duration.toMillis() + " ms";
     }
 
     private void logDiagnostics(List<CsvValidationDiagnostic> diagnostics) {
