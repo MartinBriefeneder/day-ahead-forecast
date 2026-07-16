@@ -201,6 +201,41 @@ class EnergyCsvImportServiceTest {
     }
 
     @Test
+    void repeatedAutumnDstOverlapTimestampsAreWarnings() throws IOException {
+        EnergyCsvImportResult result = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                26.10.2025, 02:00:00;1;1;0
+                26.10.2025, 02:15:00;1;1;0
+                26.10.2025, 02:00:00;2;1;1
+                26.10.2025, 02:15:00;2;1;1
+                """), ZoneId.of("Europe/Vienna"));
+
+        assertTrue(result.diagnostics().stream().noneMatch(CsvValidationDiagnostic::isError));
+        assertEquals(4, result.diagnostics().stream()
+                .filter(diagnostic -> diagnostic.message().contains("Duplicate local timestamp"))
+                .filter(diagnostic -> diagnostic.severity() == CsvValidationDiagnostic.Severity.WARNING)
+                .count());
+        assertEquals(Instant.parse("2025-10-26T00:00:00Z"), result.series().get(0).timestamp());
+        assertEquals(Instant.parse("2025-10-26T01:00:00Z"), result.series().get(2).timestamp());
+    }
+
+    @Test
+    void springDstGapSequenceIsNotReportedAsMissingData() throws IOException {
+        EnergyCsvImportResult result = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
+                ;AT001;AT001;AT001
+                30.3.2025, 01:45:00;1;1;0
+                30.3.2025, 03:00:00;1;1;0
+                """), ZoneId.of("Europe/Vienna"));
+
+        assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
+                diagnostic.message().contains("skips a daylight-saving gap")));
+        assertTrue(result.diagnostics().stream().noneMatch(diagnostic ->
+                diagnostic.message().contains("Missing quarter-hour")));
+    }
+
+    @Test
     void reportsNegativeValuesAndRowLengthDifferences() throws IOException {
         EnergyCsvImportResult result = service.parse(csv("""
                 Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
@@ -246,7 +281,7 @@ class EnergyCsvImportServiceTest {
                 """));
 
         assertTrue(duplicateColumn.diagnostics().stream().anyMatch(diagnostic ->
-                diagnostic.message().contains("Duplicate category/metering-point")));
+                diagnostic.message().contains("Duplicate metering-point/direction")));
         assertTrue(noDataRows.diagnostics().stream().anyMatch(diagnostic ->
                 diagnostic.message().contains("no data rows")));
     }

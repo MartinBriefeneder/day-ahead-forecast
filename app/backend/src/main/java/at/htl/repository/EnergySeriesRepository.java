@@ -20,7 +20,6 @@ import java.util.stream.Stream;
 @ApplicationScoped
 public class EnergySeriesRepository {
 
-    private static final int DEFAULT_WRITE_BATCH_SIZE = 10_000;
     private static final int WRITE_PROGRESS_INTERVAL = 50_000;
 
     @Inject
@@ -47,7 +46,7 @@ public class EnergySeriesRepository {
         }
 
         try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database)) {
-            int batchSize = resolvedWriteBatchSize();
+            int batchSize = writeBatchSize;
             List<Point> batch = new ArrayList<>(batchSize);
             for (int start = 0; start < series.size(); start += batchSize) {
                 int end = Math.min(start + batchSize, series.size());
@@ -61,10 +60,6 @@ public class EnergySeriesRepository {
                 client.writePoints(batch);
             }
         }
-    }
-
-    int resolvedWriteBatchSize() {
-        return writeBatchSize > 0 ? writeBatchSize : DEFAULT_WRITE_BATCH_SIZE;
     }
 
     public List<EnergySeries> find(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) throws Exception {

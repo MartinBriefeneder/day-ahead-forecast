@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Optional;
 
 @ApplicationScoped
-public class EnergyImportCommandRunner {
+public class EnergyImportStartupService {
 
     @Inject
     EnergyImportService energyImportService;
