@@ -1,6 +1,7 @@
 package at.htl.service;
 
 import at.htl.model.CsvValidationDiagnostic;
+import at.htl.model.DirectionType;
 import at.htl.model.EnergyCsvImportResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -269,7 +270,20 @@ class EnergyCsvImportServiceTest {
     }
 
     @Test
-    void duplicateColumnCombinationsAndNoDataRowsAreReported() throws IOException {
+    void sameMeteringPointWithConsumptionAndDeliveryIsImported() throws IOException {
+        EnergyCsvImportResult result = service.parse(csv("""
+                Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh];Gesamtlieferung [kWh];Effektiv an Gemeinschaft geliefert [kWh];Restlieferung [kWh]
+                ;AT001;AT001;AT001;AT001;AT001;AT001
+                1.6.2025, 00:00:00;1;1;0;2;2;0
+                """));
+
+        assertEquals(2, result.series().size());
+        assertTrue(result.series().stream().anyMatch(series -> series.direction() == DirectionType.CONSUMPTION));
+        assertTrue(result.series().stream().anyMatch(series -> series.direction() == DirectionType.DELIVERY));
+    }
+
+    @Test
+    void duplicateColumnCombinationsAreSkippedAndNoDataRowsAreReported() throws IOException {
         EnergyCsvImportResult duplicateColumn = service.parse(csv("""
                 Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh];Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001;AT001;AT001;AT001
@@ -280,7 +294,8 @@ class EnergyCsvImportServiceTest {
                 ;AT001;AT001;AT001
                 """));
 
-        assertTrue(duplicateColumn.diagnostics().stream().anyMatch(diagnostic ->
+        assertEquals(1, duplicateColumn.series().size());
+        assertTrue(duplicateColumn.diagnostics().stream().noneMatch(diagnostic ->
                 diagnostic.message().contains("Duplicate metering-point/direction")));
         assertTrue(noDataRows.diagnostics().stream().anyMatch(diagnostic ->
                 diagnostic.message().contains("no data rows")));

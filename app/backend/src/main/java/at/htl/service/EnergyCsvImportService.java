@@ -23,7 +23,6 @@ import java.time.zone.ZoneRules;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -81,7 +80,6 @@ public class EnergyCsvImportService {
             List<String> structuralFingerprint = structuralFingerprint(labels, meteringPoints);
 
             List<ColumnGroup> groups = columnGroups(labels, meteringPoints, diagnostics);
-            reportDuplicateColumnGroups(groups, diagnostics);
             if (groups.isEmpty()) {
                 diagnostics.add(CsvValidationDiagnostic.error(
                         "No importable data columns were found",
@@ -169,6 +167,7 @@ public class EnergyCsvImportService {
 
     private List<ColumnGroup> columnGroups(String[] labels, String[] meteringPoints, List<CsvValidationDiagnostic> diagnostics) {
         List<ColumnGroup> groups = new ArrayList<>();
+        Set<String> seenColumnGroups = new HashSet<>();
 
         for (int column = 1; column + 2 < labels.length; column += 3) {
             String totalLabel = labels[column].trim();
@@ -187,6 +186,11 @@ public class EnergyCsvImportService {
             String effectiveMeteringPoint = meteringPoints.length > column + 1 ? meteringPoints[column + 1].trim() : "";
             String residualMeteringPoint = meteringPoints.length > column + 2 ? meteringPoints[column + 2].trim() : "";
             if (!hasConsistentMeteringPoint(meteringPoint, effectiveMeteringPoint, residualMeteringPoint, column, diagnostics)) {
+                continue;
+            }
+
+            String columnGroupKey = meteringPoint + "|" + direction;
+            if (!seenColumnGroups.add(columnGroupKey)) {
                 continue;
             }
 
@@ -297,22 +301,6 @@ public class EnergyCsvImportService {
             fingerprint.add(labels[column].trim() + "|" + meteringPoint);
         }
         return fingerprint;
-    }
-
-    private void reportDuplicateColumnGroups(List<ColumnGroup> groups, List<CsvValidationDiagnostic> diagnostics) {
-        Set<String> seen = new HashSet<>();
-        for (ColumnGroup group : groups) {
-            String key = group.meteringPoint() + "|" + group.direction();
-            if (!seen.add(key)) {
-                diagnostics.add(CsvValidationDiagnostic.warning(
-                        "Duplicate metering-point/direction column group",
-                        1,
-                        "columns " + (group.totalColumn() + 1) + "-" + (group.residualColumn() + 1),
-                        null,
-                        group.meteringPoint() + " / " + group.direction()
-                ));
-            }
-        }
     }
 
     private DirectionType direction(String label, List<CsvValidationDiagnostic> diagnostics, int columnNumber) {
