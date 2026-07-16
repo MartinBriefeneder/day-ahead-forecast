@@ -175,7 +175,7 @@ class EnergyCsvImportServiceTest {
     }
 
     @Test
-    void reportsDstSpringGapAutumnOverlapAndNoDiagnosticOutsideTransitions() throws IOException {
+    void reportsDstSpringGapButNotAutumnOverlapOrNormalRows() throws IOException {
         EnergyCsvImportResult springGap = service.parse(csv("""
                 Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
@@ -195,14 +195,14 @@ class EnergyCsvImportServiceTest {
 
         assertTrue(springGap.diagnostics().stream().anyMatch(diagnostic ->
                 diagnostic.message().contains("daylight-saving gap")));
-        assertTrue(autumnOverlap.diagnostics().stream().anyMatch(diagnostic ->
+        assertTrue(autumnOverlap.diagnostics().stream().noneMatch(diagnostic ->
                 diagnostic.message().contains("daylight-saving overlap")));
         assertTrue(nonTransition.diagnostics().stream().noneMatch(diagnostic ->
                 diagnostic.message().contains("daylight-saving")));
     }
 
     @Test
-    void repeatedAutumnDstOverlapTimestampsAreWarnings() throws IOException {
+    void repeatedAutumnDstOverlapTimestampsAreImportedWithDistinctInstants() throws IOException {
         EnergyCsvImportResult result = service.parse(csv("""
                 Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
@@ -213,16 +213,14 @@ class EnergyCsvImportServiceTest {
                 """), ZoneId.of("Europe/Vienna"));
 
         assertTrue(result.diagnostics().stream().noneMatch(CsvValidationDiagnostic::isError));
-        assertEquals(4, result.diagnostics().stream()
-                .filter(diagnostic -> diagnostic.message().contains("Duplicate local timestamp"))
-                .filter(diagnostic -> diagnostic.severity() == CsvValidationDiagnostic.Severity.WARNING)
-                .count());
+        assertTrue(result.diagnostics().stream().noneMatch(diagnostic ->
+                diagnostic.message().contains("Duplicate local timestamp")));
         assertEquals(Instant.parse("2025-10-26T00:00:00Z"), result.series().get(0).timestamp());
         assertEquals(Instant.parse("2025-10-26T01:00:00Z"), result.series().get(2).timestamp());
     }
 
     @Test
-    void springDstGapSequenceIsNotReportedAsMissingData() throws IOException {
+    void springDstGapSequenceIsNotReportedAsMissingDataOrWarning() throws IOException {
         EnergyCsvImportResult result = service.parse(csv("""
                 Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT001;AT001
@@ -230,8 +228,8 @@ class EnergyCsvImportServiceTest {
                 30.3.2025, 03:00:00;1;1;0
                 """), ZoneId.of("Europe/Vienna"));
 
-        assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
-                diagnostic.message().contains("skips a daylight-saving gap")));
+        assertTrue(result.diagnostics().stream().noneMatch(diagnostic ->
+                diagnostic.message().contains("daylight-saving")));
         assertTrue(result.diagnostics().stream().noneMatch(diagnostic ->
                 diagnostic.message().contains("Missing quarter-hour")));
     }

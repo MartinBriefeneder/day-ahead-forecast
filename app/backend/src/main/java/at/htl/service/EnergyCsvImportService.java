@@ -13,12 +13,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.time.zone.ZoneOffsetTransition;
 import java.time.zone.ZoneRules;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -159,8 +157,6 @@ public class EnergyCsvImportService {
             }
 
             reportTimestampSequenceIssues(rowTimestamps, zoneId, diagnostics);
-            reportDaylightSavingAnomalies(rowTimestamps, zoneId, diagnostics);
-
             return new EnergyCsvImportResult(series, diagnostics, dataRowCount, categories, structuralFingerprint);
         }
     }
@@ -370,13 +366,6 @@ public class EnergyCsvImportService {
             ));
         } else if (offsets.size() > 1) {
             ambiguous = true;
-            diagnostics.add(CsvValidationDiagnostic.warning(
-                    "Timestamp is ambiguous because of a daylight-saving overlap",
-                    rowNumber,
-                    "Zeitpunkt",
-                    null,
-                    value
-            ));
         }
 
         Instant timestamp;
@@ -432,15 +421,18 @@ public class EnergyCsvImportService {
             List<RowTimestamp> rows = entry.getValue();
             if (rows.size() > 1) {
                 boolean daylightSavingOverlapDuplicate = rows.size() == 2 && rows.stream().allMatch(RowTimestamp::ambiguous);
+                if (daylightSavingOverlapDuplicate) {
+                    continue;
+                }
                 List<Integer> rowNumbers = rows.stream().map(RowTimestamp::rowNumber).toList();
                 for (RowTimestamp row : rows) {
-                    String message = daylightSavingOverlapDuplicate
-                            ? "Duplicate local timestamp occurs during a daylight-saving overlap"
-                            : "Duplicate timestamp in CSV file";
-                    CsvValidationDiagnostic diagnostic = daylightSavingOverlapDuplicate
-                            ? CsvValidationDiagnostic.warning(message, row.rowNumber(), "Zeitpunkt", row.timestamp(), "timestamp=" + entry.getKey() + ", rows=" + rowNumbers)
-                            : CsvValidationDiagnostic.error(message, row.rowNumber(), "Zeitpunkt", null, "timestamp=" + entry.getKey() + ", rows=" + rowNumbers);
-                    diagnostics.add(diagnostic);
+                    diagnostics.add(CsvValidationDiagnostic.error(
+                            "Duplicate timestamp in CSV file",
+                            row.rowNumber(),
+                            "Zeitpunkt",
+                            null,
+                            "timestamp=" + entry.getKey() + ", rows=" + rowNumbers
+                    ));
                 }
             }
         }
@@ -454,13 +446,6 @@ public class EnergyCsvImportService {
 
             if (interval.isNegative() || interval.isZero()) {
                 if (current.ambiguous()) {
-                    diagnostics.add(CsvValidationDiagnostic.warning(
-                            "Timestamp ordering deviation occurs during a daylight-saving overlap",
-                            current.rowNumber(),
-                            "Zeitpunkt",
-                            current.timestamp(),
-                            current.localDateTime().toString()
-                    ));
                     continue;
                 }
                 diagnostics.add(CsvValidationDiagnostic.error(
@@ -477,14 +462,6 @@ public class EnergyCsvImportService {
                 LocalDateTime firstMissing = previous.localDateTime().plusMinutes(15);
                 LocalDateTime lastMissing = current.localDateTime().minusMinutes(15);
                 if (isDaylightSavingGap(firstMissing, lastMissing, zoneId)) {
-                    diagnostics.add(CsvValidationDiagnostic.warning(
-                            "Local timestamp sequence skips a daylight-saving gap",
-                            current.rowNumber(),
-                            "Zeitpunkt",
-                            current.timestamp(),
-                            "previous=" + previous.localDateTime() + ", current=" + current.localDateTime()
-                                    + ", skipped=" + (firstMissing.equals(lastMissing) ? firstMissing : firstMissing + ".." + lastMissing)
-                    ));
                     continue;
                 }
                 diagnostics.add(CsvValidationDiagnostic.warning(
@@ -507,30 +484,6 @@ public class EnergyCsvImportService {
             }
         }
         return true;
-    }
-
-    private void reportDaylightSavingAnomalies(List<RowTimestamp> rowTimestamps, ZoneId zoneId, List<CsvValidationDiagnostic> diagnostics) {
-        if (rowTimestamps.isEmpty()) {
-            return;
-        }
-
-        Set<LocalDate> dates = new HashSet<>();
-        for (RowTimestamp rowTimestamp : rowTimestamps) {
-            dates.add(rowTimestamp.localDateTime().toLocalDate());
-        }
-
-        for (LocalDate date : dates) {
-            ZoneOffsetTransition transition = zoneId.getRules().nextTransition(date.atStartOfDay(zoneId).toInstant().minusSeconds(1));
-            if (transition != null && transition.getDateTimeBefore().toLocalDate().equals(date)) {
-                diagnostics.add(CsvValidationDiagnostic.warning(
-                        "CSV contains rows on a daylight-saving transition date; verify missing, repeated, or ambiguous quarter-hour timestamps",
-                        null,
-                        "Zeitpunkt",
-                        null,
-                        date.toString()
-                ));
-            }
-        }
     }
 
     private String[] split(String line) {
