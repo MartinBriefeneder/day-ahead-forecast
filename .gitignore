@@ -7,3 +7,4 @@ thesis/**
 AGENTS.md
 reference/**
 docs/**
+app/python/__pycache__
