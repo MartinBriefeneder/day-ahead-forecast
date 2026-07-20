@@ -2,6 +2,7 @@ package at.htl.repository;
 
 import at.htl.model.DirectionType;
 import at.htl.model.EnergySeries;
+import at.htl.model.ForecastDatasetValue;
 import com.influxdb.v3.client.InfluxDBClient;
 import com.influxdb.v3.client.Point;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -74,6 +75,14 @@ public class EnergySeriesRepository {
         }
     }
 
+    public List<ForecastDatasetValue> findForecastDataset(DirectionType direction, Instant from, Instant to) throws Exception {
+        String sql = buildForecastDatasetSql(direction, from, to);
+        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database);
+             Stream<Object[]> stream = client.query(sql)) {
+            return stream.map(this::toForecastDatasetValue).toList();
+        }
+    }
+
     String buildSql(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) {
         List<String> conditions = new ArrayList<>();
         if (meteringPoint != null && !meteringPoint.isBlank()) {
@@ -97,6 +106,24 @@ public class EnergySeriesRepository {
         }
         sql.append(" ORDER BY time ASC LIMIT ").append(limit);
         return sql.toString();
+    }
+
+    String buildForecastDatasetSql(DirectionType direction, Instant from, Instant to) {
+        if (direction == null) {
+            throw new IllegalArgumentException("direction must be provided");
+        }
+        if (from == null || to == null) {
+            throw new IllegalArgumentException("from and to must be provided");
+        }
+
+        return new StringBuilder()
+                .append("SELECT time, SUM(total) AS value FROM ")
+                .append(quoteIdentifier(measurement))
+                .append(" WHERE direction = '").append(direction.name()).append("'")
+                .append(" AND time >= '").append(from).append("'")
+                .append(" AND time < '").append(to).append("'")
+                .append(" GROUP BY time ORDER BY time ASC")
+                .toString();
     }
 
     private String resolvedToken() {
@@ -125,9 +152,20 @@ public class EnergySeriesRepository {
         );
     }
 
+    ForecastDatasetValue toForecastDatasetValue(Object[] row) {
+        return new ForecastDatasetValue(parseTime(row[0]), ((Number) row[1]).doubleValue());
+    }
+
     private Instant parseTime(Object value) {
         if (value instanceof Instant instant) {
             return instant;
+        }
+        if (value instanceof Number number) {
+            long epochNanos = number.longValue();
+            return Instant.ofEpochSecond(
+                    Math.floorDiv(epochNanos, 1_000_000_000L),
+                    Math.floorMod(epochNanos, 1_000_000_000L)
+            );
         }
         String text = String.valueOf(value);
         if (text.endsWith("Z") || text.contains("+")) {

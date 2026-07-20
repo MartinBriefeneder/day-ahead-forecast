@@ -24,5 +24,5 @@ until docker exec influxdb influxdb3 query --token "$INFLUXDB_TOKEN" --database 
   sleep 1
 done
 
-cd ./backend
+cd ./quarkus
 ./mvnw -Denergy.influx.token="$INFLUXDB_TOKEN" quarkus:dev

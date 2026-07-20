@@ -17,7 +17,7 @@ done
 docker exec influxdb influxdb3 delete database --token "$INFLUXDB_TOKEN" "$INFLUX_DATABASE" --hard-delete now --yes >/dev/null 2>&1 || true
 docker exec influxdb influxdb3 create database --token "$INFLUXDB_TOKEN" "$INFLUX_DATABASE"
 
-cd ./backend
+cd ./quarkus
 ./mvnw -DskipTests package
 
 printf 'Importing CSV files from %s\n' "$IMPORT_DIR"
