@@ -35,18 +35,22 @@ print(
 
 from openstef_core.types import LeadTime, Q
 from openstef_models.presets import ForecastingWorkflowConfig, create_forecasting_workflow
-from openstef_models.presets.forecasting_workflow import GBLinearForecaster
 
 workflow = create_forecasting_workflow(
     config=ForecastingWorkflowConfig(
         model_id="quickstart_gblinear",
-        model="gblinear",
+        model="lgbm",
         horizons=[LeadTime.from_string("PT36H")],
-        quantiles=[Q(0.5), Q(0.1), Q(0.9)],
+        quantiles=[Q(0.5), Q(0.1), Q(0.2)],
         target_column="load",
+        temperature_column="temperature_2m",
+        relative_humidity_column="relative_humidity_2m",
+        wind_speed_column="wind_speed_10m",
+        radiation_column="shortwave_radiation",
+        pressure_column="surface_pressure",
         verbosity=0,
         mlflow_storage=None,
-        gblinear_hyperparams=GBLinearForecaster.HyperParams(n_steps=50),
+        sample_interval=timedelta(minutes=15),
     )
 )
 # train the model
@@ -74,7 +78,7 @@ fig = (
     ForecastTimeSeriesPlotter()
     .add_measurements(measurements=predict_dataset.data["load"].loc[train_end:])
     .add_model(
-        model_name="GBLinear",
+        model_name="lgbm",
         forecast=forecast.median_series,
         quantiles=forecast.quantiles_data,
     )
