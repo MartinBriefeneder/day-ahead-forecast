@@ -17,8 +17,7 @@ cat > ./influxdb-explorer/config/config.json <<EOF
 }
 EOF
 
-docker compose down
-docker compose up -d
+docker compose up -d influxdb
 
 until docker exec influxdb influxdb3 query --token "$INFLUXDB_TOKEN" --database _internal "SHOW TABLES" >/dev/null 2>&1; do
   sleep 1
