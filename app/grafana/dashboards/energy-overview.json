@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Historical community-level generation and consumption totals from accounting CSV imports.",
+  "description": "Historische Erzeugungs- und Verbrauchssummen der Energiegemeinschaft aus importierten Abrechnungs-CSV-Dateien.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -58,17 +58,17 @@
       },
       "targets": [
         {
-          "alias": "Generation",
+          "alias": "Erzeugung",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"total\") AS \"Generation\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY'",
+          "query": "SELECT sum(\"total\") AS \"Erzeugung\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY'",
           "rawQuery": true,
           "refId": "A"
         }
       ],
-      "title": "Selected Period Generation",
+      "title": "Erzeugung im ausgewählten Zeitraum",
       "type": "stat"
     },
     {
@@ -107,17 +107,17 @@
       },
       "targets": [
         {
-          "alias": "Consumption",
+          "alias": "Verbrauch",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"total\") AS \"Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION'",
+          "query": "SELECT sum(\"total\") AS \"Verbrauch\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION'",
           "rawQuery": true,
           "refId": "A"
         }
       ],
-      "title": "Selected Period Consumption",
+      "title": "Verbrauch im ausgewählten Zeitraum",
       "type": "stat"
     },
     {
@@ -156,17 +156,17 @@
       },
       "targets": [
         {
-          "alias": "Community Delivery",
+          "alias": "Lieferung an Gemeinschaft",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"community_effective\") AS \"Community Delivery\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY'",
+          "query": "SELECT sum(\"community_effective\") AS \"Lieferung an Gemeinschaft\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY'",
           "rawQuery": true,
           "refId": "A"
         }
       ],
-      "title": "Energy Shared In Community",
+      "title": "In der Gemeinschaft geteilter Strom",
       "type": "stat"
     },
     {
@@ -205,17 +205,17 @@
       },
       "targets": [
         {
-          "alias": "Grid Import",
+          "alias": "Netzbezug",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"residual\") AS \"Grid Import\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION'",
+          "query": "SELECT sum(\"residual\") AS \"Netzbezug\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION'",
           "rawQuery": true,
           "refId": "A"
         }
       ],
-      "title": "Residual Grid Import",
+      "title": "Restlicher Netzbezug",
       "type": "stat"
     },
     {
@@ -239,7 +239,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Generation"
+              "options": "Erzeugung"
             },
             "properties": [
               {
@@ -254,7 +254,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Consumption"
+              "options": "Verbrauch"
             },
             "properties": [
               {
@@ -289,27 +289,27 @@
       },
       "targets": [
         {
-          "alias": "Generation",
+          "alias": "Erzeugung",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"total\") AS \"Generation\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
+          "query": "SELECT sum(\"total\") AS \"Erzeugung\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "A"
         },
         {
-          "alias": "Consumption",
+          "alias": "Verbrauch",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"total\") AS \"Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
+          "query": "SELECT sum(\"total\") AS \"Verbrauch\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "B"
         }
       ],
-      "title": "Quarter-Hour Total Generation And Consumption",
+      "title": "Erzeugung und Verbrauch je Viertelstunde",
       "type": "timeseries"
     },
     {
@@ -352,27 +352,27 @@
       },
       "targets": [
         {
-          "alias": "Delivered To Community",
+          "alias": "An Gemeinschaft geliefert",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"community_effective\") AS \"Delivered To Community\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
+          "query": "SELECT sum(\"community_effective\") AS \"An Gemeinschaft geliefert\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "A"
         },
         {
-          "alias": "Consumed From Community",
+          "alias": "Aus Gemeinschaft verbraucht",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"community_effective\") AS \"Consumed From Community\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
+          "query": "SELECT sum(\"community_effective\") AS \"Aus Gemeinschaft verbraucht\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "B"
         }
       ],
-      "title": "Quarter-Hour Community-Effective Energy",
+      "title": "Gemeinschaftswirksame Energie je Viertelstunde",
       "type": "timeseries"
     },
     {
@@ -415,27 +415,27 @@
       },
       "targets": [
         {
-          "alias": "Residual Export",
+          "alias": "Restliche Einspeisung",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"residual\") AS \"Residual Export\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
+          "query": "SELECT sum(\"residual\") AS \"Restliche Einspeisung\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "A"
         },
         {
-          "alias": "Residual Import",
+          "alias": "Restlicher Bezug",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"residual\") AS \"Residual Import\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
+          "query": "SELECT sum(\"residual\") AS \"Restlicher Bezug\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(15m) fill(null)",
           "rawQuery": true,
           "refId": "B"
         }
       ],
-      "title": "Quarter-Hour Residual Import And Export",
+      "title": "Restbezug und Resteinspeisung je Viertelstunde",
       "type": "timeseries"
     },
     {
@@ -478,27 +478,27 @@
       },
       "targets": [
         {
-          "alias": "Daily Generation",
+          "alias": "Tägliche Erzeugung",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"total\") AS \"Daily Generation\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(1d) fill(null)",
+          "query": "SELECT sum(\"total\") AS \"Tägliche Erzeugung\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "A"
         },
         {
-          "alias": "Daily Consumption",
+          "alias": "Täglicher Verbrauch",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"total\") AS \"Daily Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(1d) fill(null)",
+          "query": "SELECT sum(\"total\") AS \"Täglicher Verbrauch\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "B"
         }
       ],
-      "title": "Daily Total Generation And Consumption",
+      "title": "Tägliche Erzeugung und täglicher Verbrauch",
       "type": "timeseries"
     },
     {
@@ -541,27 +541,27 @@
       },
       "targets": [
         {
-          "alias": "Daily Community Delivery",
+          "alias": "Tägliche Gemeinschaftslieferung",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"community_effective\") AS \"Daily Community Delivery\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(1d) fill(null)",
+          "query": "SELECT sum(\"community_effective\") AS \"Tägliche Gemeinschaftslieferung\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "A"
         },
         {
-          "alias": "Daily Community Consumption",
+          "alias": "Täglicher Gemeinschaftsverbrauch",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"community_effective\") AS \"Daily Community Consumption\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(1d) fill(null)",
+          "query": "SELECT sum(\"community_effective\") AS \"Täglicher Gemeinschaftsverbrauch\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "B"
         }
       ],
-      "title": "Daily Community-Effective Energy",
+      "title": "Tägliche gemeinschaftswirksame Energie",
       "type": "timeseries"
     },
     {
@@ -604,27 +604,27 @@
       },
       "targets": [
         {
-          "alias": "Daily Residual Export",
+          "alias": "Tägliche Resteinspeisung",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"residual\") AS \"Daily Residual Export\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(1d) fill(null)",
+          "query": "SELECT sum(\"residual\") AS \"Tägliche Resteinspeisung\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' GROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "A"
         },
         {
-          "alias": "Daily Residual Import",
+          "alias": "Täglicher Restbezug",
           "datasource": {
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"residual\") AS \"Daily Residual Import\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(1d) fill(null)",
+          "query": "SELECT sum(\"residual\") AS \"Täglicher Restbezug\" FROM \"energy_series\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' GROUP BY time(1d) fill(null)",
           "rawQuery": true,
           "refId": "B"
         }
       ],
-      "title": "Daily Residual Import And Export",
+      "title": "Täglicher Restbezug und tägliche Resteinspeisung",
       "type": "timeseries"
     }
   ],
@@ -645,7 +645,7 @@
     "time_options": ["1d", "2d", "7d", "30d", "90d", "6M", "1y"]
   },
   "timezone": "browser",
-  "title": "Energy Community Historical Overview",
+  "title": "Historischer Überblick der Energiegemeinschaft",
   "uid": "energy-overview",
   "version": 7,
   "weekStart": ""
