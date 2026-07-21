@@ -19,7 +19,7 @@ services:
       - --object-store=file
       - --data-dir=/var/lib/influxdb3/data
       - --plugin-dir=/var/lib/influxdb3/plugins
-      - --query-file-limit=20000
+      - --query-file-limit=30000
       - --disable-telemetry-upload
     volumes:
       - type: volume

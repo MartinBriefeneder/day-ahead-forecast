@@ -3,11 +3,21 @@ from datetime import datetime, timedelta
 
 from forecast_dataset_api import load_forecast_dataset
 
-dataset = load_forecast_dataset()
-
 train_start = datetime.fromisoformat("2025-06-01T00:00:00Z")
-train_end = train_start + timedelta(days=105)
-forecast_end = train_end + timedelta(days=7)
+train_days = 200
+forecast_days = 7
+train_end = train_start + timedelta(days=train_days)
+forecast_end = train_end + timedelta(days=forecast_days)
+
+
+def format_utc(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+dataset = load_forecast_dataset(
+    start=format_utc(train_start),
+    end=format_utc(forecast_end),
+)
 
 train_dataset = dataset.filter_by_range(start=train_start, end=train_end)
 
