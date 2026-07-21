@@ -14,7 +14,7 @@ class EnergySeriesRepositoryTest {
     @Test
     void buildForecastDatasetSqlAggregatesTotalByTimeAndDirection() throws Exception {
         EnergySeriesRepository repository = new EnergySeriesRepository();
-        setField(repository, "measurement", "energy_series");
+        setField(repository, "measurement", "energy_values");
 
         String sql = repository.buildForecastDatasetSql(
                 DirectionType.CONSUMPTION,
@@ -22,7 +22,7 @@ class EnergySeriesRepositoryTest {
                 Instant.parse("2025-06-02T00:00:00Z")
         );
 
-        assertEquals("SELECT time, SUM(total) AS value FROM \"energy_series\" WHERE direction = 'CONSUMPTION' AND time >= '2025-06-01T00:00:00Z' AND time < '2025-06-02T00:00:00Z' GROUP BY time ORDER BY time ASC", sql);
+        assertEquals("SELECT time, SUM(value_kwh) AS value FROM \"energy_values\" WHERE direction = 'CONSUMPTION' AND category = 'total' AND time >= '2025-06-01T00:00:00Z' AND time < '2025-06-02T00:00:00Z' GROUP BY time ORDER BY time ASC", sql);
     }
 
     @Test

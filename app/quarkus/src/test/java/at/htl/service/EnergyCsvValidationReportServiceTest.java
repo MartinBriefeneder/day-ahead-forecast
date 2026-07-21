@@ -30,7 +30,7 @@ class EnergyCsvValidationReportServiceTest {
 
         assertFalse(report.hasErrors());
         assertEquals(2, report.files().size());
-        assertEquals(2, report.seriesCount());
+        assertEquals(6, report.seriesCount());
         assertTrue(report.meteringPoints().contains("AT001"));
         assertTrue(report.meteringPoints().contains("AT002"));
         assertTrue(report.categories().contains("Gesamtbezug [kWh]"));

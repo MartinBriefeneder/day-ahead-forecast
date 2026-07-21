@@ -2,6 +2,7 @@ package at.htl.service;
 
 import at.htl.model.CsvValidationDiagnostic;
 import at.htl.model.DirectionType;
+import at.htl.model.EnergyCategory;
 import at.htl.model.EnergyCsvImportResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -32,8 +33,9 @@ class EnergyCsvImportServiceTest {
                 """));
 
         assertTrue(result.diagnostics().isEmpty());
-        assertEquals(2, result.series().size());
+        assertEquals(6, result.series().size());
         assertEquals(Instant.parse("2025-05-31T22:00:00Z"), result.series().getFirst().timestamp());
+        assertTrue(result.series().stream().anyMatch(series -> series.category() == EnergyCategory.TOTAL && series.valueKwh() == 1.25));
     }
 
     @Test
@@ -45,7 +47,7 @@ class EnergyCsvImportServiceTest {
                 """));
 
         assertTrue(result.diagnostics().isEmpty());
-        assertEquals(1, result.series().size());
+        assertEquals(3, result.series().size());
         assertEquals(at.htl.model.DirectionType.DELIVERY, result.series().getFirst().direction());
     }
 
@@ -59,7 +61,7 @@ class EnergyCsvImportServiceTest {
                 """));
 
         assertEquals(Instant.parse("2025-05-31T22:00:00Z"), result.series().get(0).timestamp());
-        assertEquals(Instant.parse("2025-12-31T23:00:00Z"), result.series().get(1).timestamp());
+        assertEquals(Instant.parse("2025-12-31T23:00:00Z"), result.series().get(3).timestamp());
     }
 
     @Test
@@ -216,7 +218,7 @@ class EnergyCsvImportServiceTest {
         assertTrue(result.diagnostics().stream().noneMatch(diagnostic ->
                 diagnostic.message().contains("Duplicate local timestamp")));
         assertEquals(Instant.parse("2025-10-26T00:00:00Z"), result.series().get(0).timestamp());
-        assertEquals(Instant.parse("2025-10-26T01:00:00Z"), result.series().get(2).timestamp());
+        assertEquals(Instant.parse("2025-10-26T01:00:00Z"), result.series().get(6).timestamp());
     }
 
     @Test
@@ -275,7 +277,7 @@ class EnergyCsvImportServiceTest {
                 1.6.2025, 00:00:00;1;1;0;2;2;0
                 """));
 
-        assertEquals(2, result.series().size());
+        assertEquals(6, result.series().size());
         assertTrue(result.series().stream().anyMatch(series -> series.direction() == DirectionType.CONSUMPTION));
         assertTrue(result.series().stream().anyMatch(series -> series.direction() == DirectionType.DELIVERY));
     }
@@ -292,7 +294,7 @@ class EnergyCsvImportServiceTest {
                 ;AT001;AT001;AT001
                 """));
 
-        assertEquals(1, duplicateColumn.series().size());
+        assertEquals(3, duplicateColumn.series().size());
         assertTrue(duplicateColumn.diagnostics().stream().noneMatch(diagnostic ->
                 diagnostic.message().contains("Duplicate metering-point/direction")));
         assertTrue(noDataRows.diagnostics().stream().anyMatch(diagnostic ->

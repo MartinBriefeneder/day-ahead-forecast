@@ -2,6 +2,7 @@ package at.htl.service;
 
 import at.htl.model.CsvValidationDiagnostic;
 import at.htl.model.DirectionType;
+import at.htl.model.EnergyCategory;
 import at.htl.model.EnergyCsvImportResult;
 import at.htl.model.EnergySeries;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -133,14 +134,12 @@ public class EnergyCsvImportService {
                 rowTimestamps.add(rowTimestamp);
                 timestampRows.computeIfAbsent(localDateTime, ignored -> new ArrayList<>()).add(rowTimestamp);
                 for (ColumnGroup group : groups) {
-                    series.add(new EnergySeries(
-                            group.meteringPoint(),
-                            timestamp,
-                            group.direction(),
-                            parseNumber(columns, group.totalColumn(), rowNumber, labels, timestamp, diagnostics),
-                            parseNumber(columns, group.effectiveColumn(), rowNumber, labels, timestamp, diagnostics),
-                            parseNumber(columns, group.residualColumn(), rowNumber, labels, timestamp, diagnostics)
-                    ));
+                    addValue(series, group, timestamp, EnergyCategory.TOTAL,
+                            parseNumber(columns, group.totalColumn(), rowNumber, labels, timestamp, diagnostics));
+                    addValue(series, group, timestamp, EnergyCategory.COMMUNITY_EFFECTIVE,
+                            parseNumber(columns, group.effectiveColumn(), rowNumber, labels, timestamp, diagnostics));
+                    addValue(series, group, timestamp, EnergyCategory.RESIDUAL,
+                            parseNumber(columns, group.residualColumn(), rowNumber, labels, timestamp, diagnostics));
                 }
             }
 
@@ -159,6 +158,10 @@ public class EnergyCsvImportService {
             reportTimestampSequenceIssues(rowTimestamps, zoneId, diagnostics);
             return new EnergyCsvImportResult(series, diagnostics, dataRowCount, categories, structuralFingerprint);
         }
+    }
+
+    private void addValue(List<EnergySeries> series, ColumnGroup group, Instant timestamp, EnergyCategory category, double valueKwh) {
+        series.add(new EnergySeries(group.meteringPoint(), timestamp, group.direction(), category, valueKwh));
     }
 
     private List<ColumnGroup> columnGroups(String[] labels, String[] meteringPoints, List<CsvValidationDiagnostic> diagnostics) {

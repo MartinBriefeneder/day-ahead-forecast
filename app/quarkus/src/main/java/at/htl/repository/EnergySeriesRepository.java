@@ -1,6 +1,7 @@
 package at.htl.repository;
 
 import at.htl.model.DirectionType;
+import at.htl.model.EnergyCategory;
 import at.htl.model.EnergySeries;
 import at.htl.model.ForecastDatasetValue;
 import com.influxdb.v3.client.InfluxDBClient;
@@ -99,7 +100,7 @@ public class EnergySeriesRepository {
         }
 
         StringBuilder sql = new StringBuilder()
-                .append("SELECT time, metering_point, direction, total, community_effective, residual FROM ")
+                .append("SELECT time, metering_point, direction, category, value_kwh FROM ")
                 .append(quoteIdentifier(measurement));
         if (!conditions.isEmpty()) {
             sql.append(" WHERE ").append(String.join(" AND ", conditions));
@@ -117,9 +118,10 @@ public class EnergySeriesRepository {
         }
 
         return new StringBuilder()
-                .append("SELECT time, SUM(total) AS value FROM ")
+                .append("SELECT time, SUM(value_kwh) AS value FROM ")
                 .append(quoteIdentifier(measurement))
                 .append(" WHERE direction = '").append(direction.name()).append("'")
+                .append(" AND category = '").append(EnergyCategory.TOTAL.tagValue()).append("'")
                 .append(" AND time >= '").append(from).append("'")
                 .append(" AND time < '").append(to).append("'")
                 .append(" GROUP BY time ORDER BY time ASC")
@@ -135,9 +137,8 @@ public class EnergySeriesRepository {
         return Point.measurement(measurement)
                 .setTag("metering_point", series.meteringPoint())
                 .setTag("direction", series.direction().name())
-                .setField("total", series.total())
-                .setField("community_effective", series.communityEffective())
-                .setField("residual", series.residual())
+                .setTag("category", series.category().tagValue())
+                .setField("value_kwh", series.valueKwh())
                 .setTimestamp(series.timestamp());
     }
 
@@ -146,9 +147,8 @@ public class EnergySeriesRepository {
                 String.valueOf(row[1]),
                 parseTime(row[0]),
                 DirectionType.valueOf(String.valueOf(row[2])),
-                ((Number) row[3]).doubleValue(),
-                ((Number) row[4]).doubleValue(),
-                ((Number) row[5]).doubleValue()
+                EnergyCategory.fromTagValue(String.valueOf(row[3])),
+                ((Number) row[4]).doubleValue()
         );
     }
 
