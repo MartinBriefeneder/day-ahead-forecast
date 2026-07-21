@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Historische Erzeugungs- und Verbrauchssummen der Energiegemeinschaft aus importierten Abrechnungs-CSV-Dateien.",
+  "description": "Erzeugungs- und Verbrauchssummen der Energiegemeinschaft",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -309,7 +309,7 @@
           "refId": "B"
         }
       ],
-      "title": "Erzeugung und Verbrauch je Viertelstunde",
+      "title": "Erzeugung und Verbrauch",
       "type": "timeseries"
     },
     {
@@ -372,7 +372,7 @@
           "refId": "B"
         }
       ],
-      "title": "Gemeinschaftswirksame Energie je Viertelstunde",
+      "title": "Summe Effektiv an Gemeinschaft geliefert Energie | Summe Effektiv aus Gemeinschaft bezogen [kWh]",
       "type": "timeseries"
     },
     {
@@ -435,7 +435,7 @@
           "refId": "B"
         }
       ],
-      "title": "Restbezug und Resteinspeisung je Viertelstunde",
+      "title": "Restbezug und Resteinspeisung",
       "type": "timeseries"
     },
     {
