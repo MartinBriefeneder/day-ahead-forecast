@@ -78,8 +78,8 @@ public class EnergyCsvImportService {
             Set<String> categories = categories(labels);
             List<String> structuralFingerprint = structuralFingerprint(labels, meteringPoints);
 
-            List<ColumnGroup> groups = columnGroups(labels, meteringPoints, diagnostics);
-            if (groups.isEmpty()) {
+            List<ValueColumn> valueColumns = valueColumns(labels, meteringPoints, diagnostics);
+            if (valueColumns.isEmpty()) {
                 diagnostics.add(CsvValidationDiagnostic.error(
                         "No importable data columns were found",
                         1,
@@ -133,13 +133,9 @@ public class EnergyCsvImportService {
                 RowTimestamp rowTimestamp = new RowTimestamp(rowNumber, localDateTime, timestamp, timestampResult.ambiguous());
                 rowTimestamps.add(rowTimestamp);
                 timestampRows.computeIfAbsent(localDateTime, ignored -> new ArrayList<>()).add(rowTimestamp);
-                for (ColumnGroup group : groups) {
-                    addValue(series, group, timestamp, EnergyCategory.TOTAL,
-                            parseNumber(columns, group.totalColumn(), rowNumber, labels, timestamp, diagnostics));
-                    addValue(series, group, timestamp, EnergyCategory.COMMUNITY_EFFECTIVE,
-                            parseNumber(columns, group.effectiveColumn(), rowNumber, labels, timestamp, diagnostics));
-                    addValue(series, group, timestamp, EnergyCategory.RESIDUAL,
-                            parseNumber(columns, group.residualColumn(), rowNumber, labels, timestamp, diagnostics));
+                for (ValueColumn valueColumn : valueColumns) {
+                    addValue(series, valueColumn, timestamp,
+                            parseNumber(columns, valueColumn.column(), rowNumber, labels, timestamp, diagnostics));
                 }
             }
 
@@ -160,116 +156,48 @@ public class EnergyCsvImportService {
         }
     }
 
-    private void addValue(List<EnergySeries> series, ColumnGroup group, Instant timestamp, EnergyCategory category, double valueKwh) {
-        series.add(new EnergySeries(group.meteringPoint(), timestamp, group.direction(), category, valueKwh));
+    private void addValue(List<EnergySeries> series, ValueColumn valueColumn, Instant timestamp, double valueKwh) {
+        series.add(new EnergySeries(valueColumn.meteringPoint(), timestamp, valueColumn.direction(), valueColumn.category(), valueKwh));
     }
 
-    private List<ColumnGroup> columnGroups(String[] labels, String[] meteringPoints, List<CsvValidationDiagnostic> diagnostics) {
-        List<ColumnGroup> groups = new ArrayList<>();
-        Set<String> seenColumnGroups = new HashSet<>();
+    private List<ValueColumn> valueColumns(String[] labels, String[] meteringPoints, List<CsvValidationDiagnostic> diagnostics) {
+        List<ValueColumn> valueColumns = new ArrayList<>();
+        Set<String> seenValueColumns = new HashSet<>();
 
-        for (int column = 1; column + 2 < labels.length; column += 3) {
-            String totalLabel = labels[column].trim();
-            String effectiveLabel = labels[column + 1].trim();
-            String residualLabel = labels[column + 2].trim();
-            DirectionType direction = direction(totalLabel, diagnostics, column + 1);
-            if (direction == null) {
+        for (int column = 1; column < labels.length; column++) {
+            CategoryMapping mapping = categoryMapping(labels[column].trim(), diagnostics, column + 1);
+            if (mapping == null) {
                 continue;
             }
 
-            if (!hasExpectedCategorySequence(direction, totalLabel, effectiveLabel, residualLabel, column, diagnostics)) {
+            String meteringPoint = meteringPoint(meteringPoints, column, diagnostics);
+            if (meteringPoint == null) {
                 continue;
             }
 
-            String meteringPoint = meteringPoints.length > column ? meteringPoints[column].trim() : "";
-            String effectiveMeteringPoint = meteringPoints.length > column + 1 ? meteringPoints[column + 1].trim() : "";
-            String residualMeteringPoint = meteringPoints.length > column + 2 ? meteringPoints[column + 2].trim() : "";
-            if (!hasConsistentMeteringPoint(meteringPoint, effectiveMeteringPoint, residualMeteringPoint, column, diagnostics)) {
+            String valueColumnKey = meteringPoint + "|" + mapping.direction() + "|" + mapping.category();
+            if (!seenValueColumns.add(valueColumnKey)) {
                 continue;
             }
 
-            String columnGroupKey = meteringPoint + "|" + direction;
-            if (!seenColumnGroups.add(columnGroupKey)) {
-                continue;
-            }
-
-            groups.add(new ColumnGroup(
-                    meteringPoint,
-                    direction,
+            valueColumns.add(new ValueColumn(
                     column,
-                    column + 1,
-                    column + 2
+                    meteringPoint,
+                    mapping.direction(),
+                    mapping.category()
             ));
         }
 
-        return groups;
+        return valueColumns;
     }
 
-    private boolean hasExpectedCategorySequence(DirectionType direction, String totalLabel, String effectiveLabel, String residualLabel, int zeroBasedColumn, List<CsvValidationDiagnostic> diagnostics) {
-        String expectedTotal;
-        String expectedEffective;
-        String expectedResidual;
-        if (direction == DirectionType.DELIVERY) {
-            expectedTotal = "Gesamtlieferung [kWh]";
-            expectedEffective = "Effektiv an Gemeinschaft geliefert [kWh]";
-            expectedResidual = "Restlieferung [kWh]";
-        } else {
-            expectedTotal = "Gesamtbezug [kWh]";
-            expectedEffective = "Effektiv aus Gemeinschaft bezogen [kWh]";
-            expectedResidual = "Restbezug [kWh]";
+    private String meteringPoint(String[] meteringPoints, int zeroBasedColumn, List<CsvValidationDiagnostic> diagnostics) {
+        String meteringPoint = meteringPoints.length > zeroBasedColumn ? meteringPoints[zeroBasedColumn].trim() : "";
+        if (meteringPoint.isBlank()) {
+            diagnostics.add(missingMeteringPointError(zeroBasedColumn + 1, meteringPoint));
+            return null;
         }
-
-        boolean valid = true;
-        if (!expectedTotal.equals(totalLabel)) {
-            diagnostics.add(categorySequenceError("Unexpected total category", zeroBasedColumn + 1, expectedTotal, totalLabel));
-            valid = false;
-        }
-        if (!expectedEffective.equals(effectiveLabel)) {
-            diagnostics.add(categorySequenceError("Unexpected community-effective category", zeroBasedColumn + 2, expectedEffective, effectiveLabel));
-            valid = false;
-        }
-        if (!expectedResidual.equals(residualLabel)) {
-            diagnostics.add(categorySequenceError("Unexpected residual category", zeroBasedColumn + 3, expectedResidual, residualLabel));
-            valid = false;
-        }
-        return valid;
-    }
-
-    private CsvValidationDiagnostic categorySequenceError(String message, int columnNumber, String expected, String actual) {
-        return CsvValidationDiagnostic.error(
-                message + ": expected `" + expected + "`",
-                1,
-                "column " + columnNumber,
-                null,
-                actual
-        );
-    }
-
-    private boolean hasConsistentMeteringPoint(String totalMeteringPoint, String effectiveMeteringPoint, String residualMeteringPoint, int zeroBasedColumn, List<CsvValidationDiagnostic> diagnostics) {
-        boolean valid = true;
-        if (totalMeteringPoint.isBlank()) {
-            diagnostics.add(missingMeteringPointError(zeroBasedColumn + 1, totalMeteringPoint));
-            valid = false;
-        }
-        if (effectiveMeteringPoint.isBlank()) {
-            diagnostics.add(missingMeteringPointError(zeroBasedColumn + 2, effectiveMeteringPoint));
-            valid = false;
-        }
-        if (residualMeteringPoint.isBlank()) {
-            diagnostics.add(missingMeteringPointError(zeroBasedColumn + 3, residualMeteringPoint));
-            valid = false;
-        }
-        if (valid && (!totalMeteringPoint.equals(effectiveMeteringPoint) || !totalMeteringPoint.equals(residualMeteringPoint))) {
-            diagnostics.add(CsvValidationDiagnostic.error(
-                    "Inconsistent metering point identifiers within energy group",
-                    2,
-                    "columns " + (zeroBasedColumn + 1) + "-" + (zeroBasedColumn + 3),
-                    null,
-                    totalMeteringPoint + ", " + effectiveMeteringPoint + ", " + residualMeteringPoint
-            ));
-            return false;
-        }
-        return valid;
+        return meteringPoint;
     }
 
     private CsvValidationDiagnostic missingMeteringPointError(int columnNumber, String rawValue) {
@@ -302,33 +230,25 @@ public class EnergyCsvImportService {
         return fingerprint;
     }
 
-    private DirectionType direction(String label, List<CsvValidationDiagnostic> diagnostics, int columnNumber) {
-        if (isDeliveryLabel(label)) {
-            return DirectionType.DELIVERY;
-        }
-        if (isConsumptionLabel(label)) {
-            return DirectionType.CONSUMPTION;
-        }
-        diagnostics.add(CsvValidationDiagnostic.error(
-                "Cannot determine energy direction from header",
-                1,
-                "column " + columnNumber,
-                null,
-                label
-        ));
-        return null;
-    }
-
-    private boolean isDeliveryLabel(String label) {
-        return "Gesamtlieferung [kWh]".equals(label)
-                || "Effektiv an Gemeinschaft geliefert [kWh]".equals(label)
-                || "Restlieferung [kWh]".equals(label);
-    }
-
-    private boolean isConsumptionLabel(String label) {
-        return "Gesamtbezug [kWh]".equals(label)
-                || "Effektiv aus Gemeinschaft bezogen [kWh]".equals(label)
-                || "Restbezug [kWh]".equals(label);
+    private CategoryMapping categoryMapping(String label, List<CsvValidationDiagnostic> diagnostics, int columnNumber) {
+        return switch (label) {
+            case "Gesamtlieferung [kWh]" -> new CategoryMapping(DirectionType.DELIVERY, EnergyCategory.TOTAL);
+            case "Effektiv an Gemeinschaft geliefert [kWh]" -> new CategoryMapping(DirectionType.DELIVERY, EnergyCategory.COMMUNITY_EFFECTIVE);
+            case "Restlieferung [kWh]" -> new CategoryMapping(DirectionType.DELIVERY, EnergyCategory.RESIDUAL);
+            case "Gesamtbezug [kWh]" -> new CategoryMapping(DirectionType.CONSUMPTION, EnergyCategory.TOTAL);
+            case "Effektiv aus Gemeinschaft bezogen [kWh]" -> new CategoryMapping(DirectionType.CONSUMPTION, EnergyCategory.COMMUNITY_EFFECTIVE);
+            case "Restbezug [kWh]" -> new CategoryMapping(DirectionType.CONSUMPTION, EnergyCategory.RESIDUAL);
+            default -> {
+                diagnostics.add(CsvValidationDiagnostic.error(
+                        "Cannot determine energy direction from header",
+                        1,
+                        "column " + columnNumber,
+                        null,
+                        label
+                ));
+                yield null;
+            }
+        };
     }
 
     private ParseTimestampResult parseTimestamp(String value, ZoneId zoneId, int rowNumber, java.util.Map<LocalDateTime, Integer> ambiguousTimestampOccurrences, List<CsvValidationDiagnostic> diagnostics) {
@@ -493,12 +413,17 @@ public class EnergyCsvImportService {
         return line.split(";", -1);
     }
 
-    private record ColumnGroup(
+    private record ValueColumn(
+            int column,
             String meteringPoint,
             DirectionType direction,
-            int totalColumn,
-            int effectiveColumn,
-            int residualColumn
+            EnergyCategory category
+    ) {
+    }
+
+    private record CategoryMapping(
+            DirectionType direction,
+            EnergyCategory category
     ) {
     }
 

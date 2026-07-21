@@ -2,6 +2,7 @@ package at.htl.repository;
 
 import at.htl.model.DirectionType;
 import at.htl.model.ForecastDatasetValue;
+import com.influxdb.v3.client.write.WriteOptions;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -45,9 +46,25 @@ class EnergySeriesRepositoryTest {
         assertEquals(24.72825, value.value());
     }
 
+    @Test
+    void writeOptionsUseConfiguredGzipThreshold() throws Exception {
+        EnergySeriesRepository repository = new EnergySeriesRepository();
+        setField(repository, "gzipThresholdBytes", 1);
+
+        WriteOptions options = repository.writeOptions();
+
+        assertEquals(1, getField(options, "gzipThreshold"));
+    }
+
     private void setField(Object target, String name, Object value) throws Exception {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    private Object getField(Object target, String name) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(target);
     }
 }

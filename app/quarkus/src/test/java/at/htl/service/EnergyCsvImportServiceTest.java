@@ -251,22 +251,25 @@ class EnergyCsvImportServiceTest {
     }
 
     @Test
-    void invalidCategorySequenceAndMeteringPointMismatchAreReported() throws IOException {
-        EnergyCsvImportResult invalidCategory = service.parse(csv("""
+    void reorderedCategoriesAndPerColumnMeteringPointsAreImported() throws IOException {
+        EnergyCsvImportResult reorderedCategories = service.parse(csv("""
                 Zeitpunkt;Gesamtbezug [kWh];Restbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh]
                 ;AT001;AT001;AT001
                 1.6.2025, 00:00:00;1;1;0
                 """));
-        EnergyCsvImportResult mismatchedMeteringPoint = service.parse(csv("""
+        EnergyCsvImportResult perColumnMeteringPoints = service.parse(csv("""
                 Zeitpunkt;Gesamtbezug [kWh];Effektiv aus Gemeinschaft bezogen [kWh];Restbezug [kWh]
                 ;AT001;AT999;AT001
                 1.6.2025, 00:00:00;1;1;0
                 """));
 
-        assertTrue(invalidCategory.diagnostics().stream().anyMatch(diagnostic ->
-                diagnostic.message().contains("Unexpected community-effective category")));
-        assertTrue(mismatchedMeteringPoint.diagnostics().stream().anyMatch(diagnostic ->
-                diagnostic.message().contains("Inconsistent metering point")));
+        assertTrue(reorderedCategories.diagnostics().isEmpty());
+        assertEquals(3, reorderedCategories.series().size());
+        assertTrue(reorderedCategories.series().stream().anyMatch(series ->
+                series.category() == EnergyCategory.RESIDUAL && series.valueKwh() == 1));
+        assertTrue(perColumnMeteringPoints.diagnostics().isEmpty());
+        assertTrue(perColumnMeteringPoints.series().stream().anyMatch(series ->
+                series.meteringPoint().equals("AT999") && series.category() == EnergyCategory.COMMUNITY_EFFECTIVE));
     }
 
     @Test

@@ -23,6 +23,9 @@ public class ForecastDatasetService {
     @Inject
     EnergySeriesRepository energySeriesRepository;
 
+    @ConfigProperty(name = "energy.forecast-dataset.max-days", defaultValue = "370")
+    long maxDays;
+
     public ForecastDatasetResponse getDataset(String targetValue, String fromValue, String toValue) throws Exception {
         ForecastDatasetTarget target = ForecastDatasetTarget.parse(requirePresent("target", targetValue));
         Instant from = parseInstant("from", fromValue);
@@ -59,6 +62,9 @@ public class ForecastDatasetService {
     private void validateRange(Instant from, Instant to) {
         if (!to.isAfter(from)) {
             throw new IllegalArgumentException("Query parameter to must be after from.");
+        }
+        if (Duration.between(from, to).toDays() > maxDays) {
+            throw new IllegalArgumentException("Query range must not exceed " + maxDays + " days.");
         }
     }
 }
