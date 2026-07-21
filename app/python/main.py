@@ -6,7 +6,7 @@ from forecast_dataset_api import load_forecast_dataset
 dataset = load_forecast_dataset()
 
 train_start = datetime.fromisoformat("2025-06-01T00:00:00Z")
-train_end = train_start + timedelta(days=45)
+train_end = train_start + timedelta(days=105)
 forecast_end = train_end + timedelta(days=7)
 
 train_dataset = dataset.filter_by_range(start=train_start, end=train_end)
@@ -39,9 +39,9 @@ from openstef_models.presets import ForecastingWorkflowConfig, create_forecastin
 workflow = create_forecasting_workflow(
     config=ForecastingWorkflowConfig(
         model_id="quickstart_gblinear",
-        model="lgbm",
+        model="gblinear",
         horizons=[LeadTime.from_string("PT36H")],
-        quantiles=[Q(0.5), Q(0.1), Q(0.2)],
+        quantiles=[Q(0.5), Q(0.2), Q(0.6)],
         target_column="load",
         temperature_column="temperature_2m",
         relative_humidity_column="relative_humidity_2m",
@@ -78,7 +78,7 @@ fig = (
     ForecastTimeSeriesPlotter()
     .add_measurements(measurements=predict_dataset.data["load"].loc[train_end:])
     .add_model(
-        model_name="lgbm",
+        model_name="gblinear",
         forecast=forecast.median_series,
         quantiles=forecast.quantiles_data,
     )
