@@ -6,6 +6,7 @@ import at.htl.model.EnergySeries;
 import at.htl.model.ForecastDatasetValue;
 import com.influxdb.v3.client.InfluxDBClient;
 import com.influxdb.v3.client.Point;
+import com.influxdb.v3.client.write.WriteOptions;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -42,6 +43,9 @@ public class EnergySeriesRepository {
     @ConfigProperty(name = "energy.influx.write-batch-size", defaultValue = "10000")
     int writeBatchSize;
 
+    @ConfigProperty(name = "energy.influx.gzip-threshold-bytes", defaultValue = "1")
+    int gzipThresholdBytes;
+
     public void saveAll(List<EnergySeries> series) throws Exception {
         if (series.isEmpty()) {
             return;
@@ -49,6 +53,7 @@ public class EnergySeriesRepository {
 
         try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database)) {
             int batchSize = writeBatchSize;
+            WriteOptions writeOptions = writeOptions();
             List<Point> batch = new ArrayList<>(batchSize);
             for (int start = 0; start < series.size(); start += batchSize) {
                 int end = Math.min(start + batchSize, series.size());
@@ -59,9 +64,15 @@ public class EnergySeriesRepository {
                 for (int index = start; index < end; index++) {
                     batch.add(toPoint(series.get(index)));
                 }
-                client.writePoints(batch);
+                client.writePoints(batch, writeOptions);
             }
         }
+    }
+
+    WriteOptions writeOptions() {
+        return new WriteOptions.Builder()
+                .gzipThreshold(gzipThresholdBytes)
+                .build();
     }
 
     public List<EnergySeries> find(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) throws Exception {
