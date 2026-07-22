@@ -10,11 +10,14 @@ def load_forecast_dataset(
     target: str = "load",
     start: str = "2025-06-01T00:00:00Z",
     end: str = "2025-07-20T00:00:00Z",
+    timeout_seconds: int = 30,
 ) -> TimeSeriesDataset:
+    if target not in {"load", "generation"}:
+        raise ValueError("target must be 'load' or 'generation'")
     response = requests.get(
         f"{base_url}/api/forecast-datasets",
         params={"target": target, "from": start, "to": end},
-        timeout=30,
+        timeout=timeout_seconds,
     )
     response.raise_for_status()
 
