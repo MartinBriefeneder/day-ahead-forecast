@@ -1,7 +1,7 @@
 package at.htl.model;
 
 public enum ForecastDatasetTarget {
-    LOAD("load", DirectionType.CONSUMPTION),
+    CONSUMPTION("consumption", DirectionType.CONSUMPTION),
     GENERATION("generation", DirectionType.DELIVERY);
 
     private final String columnName;
@@ -26,6 +26,6 @@ public enum ForecastDatasetTarget {
                 return target;
             }
         }
-        throw new IllegalArgumentException("Unsupported target: " + value + ". Supported targets are load and generation.");
+        throw new IllegalArgumentException("Unsupported target: " + value + ". Supported targets are consumption and generation.");
     }
 }
