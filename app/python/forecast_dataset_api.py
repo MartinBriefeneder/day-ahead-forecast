@@ -5,15 +5,15 @@ import requests
 from openstef_core.datasets import TimeSeriesDataset
 
 
-def load_forecast_dataset(
+def fetch_forecast_dataset(
     base_url: str = "http://localhost:8080",
-    target: str = "load",
+    target: str = "consumption",
     start: str = "2025-06-01T00:00:00Z",
     end: str = "2025-07-20T00:00:00Z",
     timeout_seconds: int = 30,
 ) -> TimeSeriesDataset:
-    if target not in {"load", "generation"}:
-        raise ValueError("target must be 'load' or 'generation'")
+    if target not in {"consumption", "generation"}:
+        raise ValueError("target must be 'consumption' or 'generation'")
     response = requests.get(
         f"{base_url}/api/forecast-datasets",
         params={"target": target, "from": start, "to": end},
