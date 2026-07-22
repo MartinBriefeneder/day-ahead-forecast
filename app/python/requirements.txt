@@ -1,0 +1,6 @@
+openstef-models
+openstef-beam
+pandas
+requests
+plotly
+openstef-meta

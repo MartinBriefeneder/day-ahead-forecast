@@ -41,27 +41,33 @@ print(
     f"{predict_dataset.data.index.min():%Y-%m-%d} to {predict_dataset.data.index.max():%Y-%m-%d}"
 )
 
+
 # configure the workflow
 
 from openstef_core.types import LeadTime, Q
 from openstef_models.presets import ForecastingWorkflowConfig, create_forecasting_workflow
 
+
+quantiles=[Q(0.5), Q(0.1), Q(0.6)] 
+
+config=ForecastingWorkflowConfig(
+    model_id="quickstart_gblinear",
+    quantiles=quantiles,
+    model="xgboost",
+    horizons=[LeadTime.from_string("PT36H")],
+    target_column="load",
+    temperature_column="temperature_2m",
+    relative_humidity_column="relative_humidity_2m",
+    wind_speed_column="wind_speed_10m",
+    radiation_column="shortwave_radiation",
+    pressure_column="surface_pressure",
+    verbosity=0,
+    mlflow_storage=None,
+    sample_interval=timedelta(minutes=15),
+)
+
 workflow = create_forecasting_workflow(
-    config=ForecastingWorkflowConfig(
-        model_id="quickstart_gblinear",
-        model="gblinear",
-        horizons=[LeadTime.from_string("PT36H")],
-        quantiles=[Q(0.5), Q(0.2), Q(0.6)],
-        target_column="load",
-        temperature_column="temperature_2m",
-        relative_humidity_column="relative_humidity_2m",
-        wind_speed_column="wind_speed_10m",
-        radiation_column="shortwave_radiation",
-        pressure_column="surface_pressure",
-        verbosity=0,
-        mlflow_storage=None,
-        sample_interval=timedelta(minutes=15),
-    )
+        config
 )
 # train the model
 result = workflow.fit(train_dataset)
@@ -88,7 +94,7 @@ fig = (
     ForecastTimeSeriesPlotter()
     .add_measurements(measurements=predict_dataset.data["load"].loc[train_end:])
     .add_model(
-        model_name="gblinear",
+        model_name="xgboost",
         forecast=forecast.median_series,
         quantiles=forecast.quantiles_data,
     )
@@ -101,3 +107,57 @@ fig.update_layout(
     height=500,
 )
 fig.show()
+
+#Measure calibration quality https://openstef.github.io/openstef/tutorials/quantile_calibration.html
+
+from pandas import DataFrame
+
+actuals = predict_dataset.data["load"].loc[train_end:].reindex(forecast.data.index).dropna()
+forecast_aligned = forecast.data.loc[actuals.index]
+
+expected = [float(q) for q in quantiles]
+observed_uncal = [float((actuals <= forecast_aligned[f"quantile_P{int(float(q) * 100)}"]).mean()) for q in quantiles]
+
+calibration_df = DataFrame(
+    {
+        "quantile": [f"P{int(float(q) * 100)}" for q in quantiles],
+        "expected": expected,
+        "observed": observed_uncal,
+        "error": [o - e for o, e in zip(observed_uncal, expected, strict=True)],
+    }
+)
+print("Calibration before isotonic correction:")
+print(calibration_df.to_string(index=False))
+
+
+from openstef_models.transforms.postprocessing import IsotonicQuantileCalibrator
+
+config_cal = config.model_copy(update={"model_id": "calibrated_gblinear"})
+workflow_cal = create_forecasting_workflow(config=config_cal)
+
+# Append isotonic calibration to the existing postprocessing pipeline
+workflow_cal.model.postprocessing.transforms.append(
+    IsotonicQuantileCalibrator(
+        quantiles=quantiles,
+        use_local_quantile_estimation=True,
+    )
+)
+
+workflow_cal.fit(train_dataset)
+forecast_cal = workflow_cal.predict(predict_dataset, forecast_start=train_end)
+
+forecast_cal_aligned = forecast_cal.data.loc[actuals.index]
+
+observed_cal = [float((actuals <= forecast_cal_aligned[f"quantile_P{int(float(q) * 100)}"]).mean()) for q in quantiles]
+
+comparison_df = DataFrame(
+    {
+        "quantile": [f"P{int(float(q) * 100)}" for q in quantiles],
+        "expected": expected,
+        "observed (before)": observed_uncal,
+        "observed (after)": observed_cal,
+        "error (before)": [o - e for o, e in zip(observed_uncal, expected, strict=True)],
+        "error (after)": [o - e for o, e in zip(observed_cal, expected, strict=True)],
+    }
+)
+print(comparison_df.to_string(index=False))
