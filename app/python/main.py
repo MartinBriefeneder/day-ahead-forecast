@@ -1,9 +1,14 @@
-# load dataset 
+# Fetch dataset
 from datetime import datetime, timedelta
 
-from forecast_dataset_api import load_forecast_dataset
+from forecast_dataset_api import fetch_forecast_dataset
 
 train_start = datetime.fromisoformat("2025-06-01T00:00:00Z")
+forecast_target = "consumption"
+target_label = {
+    "consumption": "Consumption",
+    "generation": "Generation",
+}[forecast_target]
 train_days = 200
 forecast_days = 7
 train_end = train_start + timedelta(days=train_days)
@@ -14,7 +19,8 @@ def format_utc(value: datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
 
 
-dataset = load_forecast_dataset(
+dataset = fetch_forecast_dataset(
+    target=forecast_target,
     start=format_utc(train_start),
     end=format_utc(forecast_end),
 )
@@ -55,7 +61,7 @@ config=ForecastingWorkflowConfig(
     quantiles=quantiles,
     model="xgboost",
     horizons=[LeadTime.from_string("PT36H")],
-    target_column="load",
+    target_column=forecast_target,
     temperature_column="temperature_2m",
     relative_humidity_column="relative_humidity_2m",
     wind_speed_column="wind_speed_10m",
@@ -92,17 +98,17 @@ from openstef_beam.analysis.plots import ForecastTimeSeriesPlotter
 
 fig = (
     ForecastTimeSeriesPlotter()
-    .add_measurements(measurements=predict_dataset.data["load"].loc[train_end:])
+    .add_measurements(measurements=predict_dataset.data[forecast_target].loc[train_end:])
     .add_model(
-        model_name="xgboost",
+        model_name=f"{target_label} forecast (xgboost)",
         forecast=forecast.median_series,
         quantiles=forecast.quantiles_data,
     )
     .plot()
 )
 fig.update_layout(
-    title="Forecast vs actuals",
-    yaxis_title="Load (MW)",
+    title=f"OpenSTEF {target_label} Forecast vs Actuals ({forecast_target})",
+    yaxis_title=f"{target_label} energy (kWh)",
     xaxis_title="Time",
     height=500,
 )
@@ -112,7 +118,7 @@ fig.show()
 
 from pandas import DataFrame
 
-actuals = predict_dataset.data["load"].loc[train_end:].reindex(forecast.data.index).dropna()
+actuals = predict_dataset.data[forecast_target].loc[train_end:].reindex(forecast.data.index).dropna()
 forecast_aligned = forecast.data.loc[actuals.index]
 
 expected = [float(q) for q in quantiles]
