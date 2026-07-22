@@ -56,23 +56,23 @@ services:
         source: ./grafana/dashboards
         target: /var/lib/grafana/dashboards
         read_only: true
-  influxdb3-explorer:
-    container_name: influxdb3-explorer
-    image: influxdata/influxdb3-ui:1.9.0
-    command:
-      - --mode=admin
-    ports:
-      - 127.0.0.1:8180:8080
-    volumes:
-      - type: bind
-        source: ./influxdb-explorer/config
-        target: /app-root/config
-        read_only: true
-      - type: volume
-        source: influxdb3-explorer-db
-        target: /db
-    depends_on:
-      - influxdb
+  # influxdb3-explorer:
+  #   container_name: influxdb3-explorer
+  #   image: influxdata/influxdb3-ui:1.9.0
+  #   command:
+  #     - --mode=admin
+  #   ports:
+  #     - 127.0.0.1:8180:8080
+  #   volumes:
+  #     - type: bind
+  #       source: ./influxdb-explorer/config
+  #       target: /app-root/config
+  #       read_only: true
+  #     - type: volume
+  #       source: influxdb3-explorer-db
+  #       target: /db
+  #   depends_on:
+  #     - influxdb
 volumes:
   influxdb3-data:
   influxdb3-plugins:
