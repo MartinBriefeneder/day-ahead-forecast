@@ -68,7 +68,7 @@
           "refId": "A"
         }
       ],
-      "title": "Erzeugung im ausgewählten Zeitraum",
+      "title": "Erzeugung",
       "type": "stat"
     },
     {
@@ -117,7 +117,7 @@
           "refId": "A"
         }
       ],
-      "title": "Verbrauch im ausgewählten Zeitraum",
+      "title": "Verbrauch",
       "type": "stat"
     },
     {
@@ -166,7 +166,56 @@
           "refId": "A"
         }
       ],
-      "title": "In der Gemeinschaft geteilter Strom",
+      "title": "Effektiv an die Gemeinschaft geliefert",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#2563EB",
+            "mode": "fixed"
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "alias": "Bezug aus Gemeinschaft",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"value_kwh\") AS \"Bezug aus Gemeinschaft\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'community_effective'",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Effektiv aus der Gemeinschaft bezogen",
       "type": "stat"
     },
     {
@@ -187,8 +236,8 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 18,
-        "y": 0
+        "x": 0,
+        "y": 4
       },
       "id": 8,
       "options": {
@@ -216,6 +265,55 @@
         }
       ],
       "title": "Restlicher Netzbezug",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#16A34A",
+            "mode": "fixed"
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 4
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "alias": "Restliche Einspeisung",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"value_kwh\") AS \"Restliche Einspeisung\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'residual'",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Restliche Einspeisung",
       "type": "stat"
     },
     {
@@ -272,7 +370,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 8
       },
       "id": 1,
       "options": {
@@ -335,7 +433,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 18
       },
       "id": 2,
       "options": {
@@ -398,7 +496,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 18
       },
       "id": 3,
       "options": {
@@ -461,7 +559,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 26
       },
       "id": 4,
       "options": {
@@ -524,7 +622,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 35
       },
       "id": 9,
       "options": {
@@ -587,7 +685,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 31
+        "y": 35
       },
       "id": 10,
       "options": {
@@ -647,6 +745,6 @@
   "timezone": "browser",
   "title": "Historischer Überblick der Energiegemeinschaft",
   "uid": "energy-overview",
-  "version": 7,
+  "version": 9,
   "weekStart": ""
 }
