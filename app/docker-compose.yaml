@@ -58,7 +58,7 @@ services:
         read_only: true
   # influxdb3-explorer:
   #   container_name: influxdb3-explorer
-  #   image: influxdata/influxdb3-ui:1.9.0
+  #   image: influxdata/influxdb3-ui:latest
   #   command:
   #     - --mode=admin
   #   ports:
@@ -73,6 +73,18 @@ services:
   #       target: /db
   #   depends_on:
   #     - influxdb
+  chronograf:
+    container_name: chronograf
+    image: chronograf:latest
+    environment:
+      INFLUXDB_V3_SUPPORT_ENABLED: "true"
+      INFLUXDB_TYPE: influx-v3-core
+      INFLUXDB_URL: http://influxdb:8181
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?INFLUXDB_TOKEN must be exported before starting Chronograf}
+    ports:
+      - 8888:8888
+    depends_on:
+      - influxdb
 volumes:
   influxdb3-data:
   influxdb3-plugins:
