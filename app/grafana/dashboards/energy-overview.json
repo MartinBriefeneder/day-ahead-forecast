@@ -724,6 +724,215 @@
       ],
       "title": "Täglicher Restbezug und tägliche Resteinspeisung",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "description": "Persisted forecast values compared with the actual values included in the same forecast run.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "kWh"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Forecast"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F59E0B",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Actual"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2563EB",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#DC2626",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Forecast",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT mean(\"forecast_kwh\") AS \"Forecast\" FROM \"energy_forecasts\" WHERE $timeFilter AND \"run_id\" =~ /^$forecast_run$/ GROUP BY time(15m) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Actual",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT mean(\"actual_kwh\") AS \"Actual\" FROM \"energy_forecasts\" WHERE $timeFilter AND \"run_id\" =~ /^$forecast_run$/ GROUP BY time(15m) fill(null)",
+          "rawQuery": true,
+          "refId": "B"
+        },
+        {
+          "alias": "Error",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT mean(\"error_kwh\") AS \"Error\" FROM \"energy_forecasts\" WHERE $timeFilter AND \"run_id\" =~ /^$forecast_run$/ GROUP BY time(15m) fill(null)",
+          "rawQuery": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Forecast vs Actual ($forecast_run)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "kWh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 53
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Daily forecast error",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT sum(\"error_kwh\") AS \"Daily forecast error\" FROM \"energy_forecasts\" WHERE $timeFilter AND \"run_id\" =~ /^$forecast_run$/ GROUP BY time(1d) fill(null)",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Daily Forecast Error",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 53
+      },
+      "id": 15,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "alias": "$tag_metric",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "SELECT last(\"value\") AS \"Value\" FROM \"forecast_evaluations\" WHERE $timeFilter AND \"run_id\" =~ /^$forecast_run$/ GROUP BY \"metric\"",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Forecast Quality Metrics",
+      "type": "table"
     }
   ],
   "preload": false,
@@ -731,7 +940,28 @@
   "schemaVersion": 41,
   "tags": ["energy", "community", "influxdb"],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": "influxdb",
+          "uid": "influxdb-energy"
+        },
+        "definition": "SHOW TAG VALUES FROM \"energy_forecasts\" WITH KEY = \"run_id\"",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Forecast run",
+        "multi": false,
+        "name": "forecast_run",
+        "options": [],
+        "query": "SHOW TAG VALUES FROM \"energy_forecasts\" WITH KEY = \"run_id\"",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "2025-06-01T00:00:00Z",

@@ -1,0 +1,17 @@
+services:
+  backend:
+    container_name: forecast-backend
+    build:
+      context: ./quarkus
+      dockerfile: Dockerfile
+    ports:
+      - 8080:8080
+    environment:
+      ENERGY_INFLUX_URL: http://influxdb:8181
+      ENERGY_INFLUX_DATABASE: energy
+      ENERGY_INFLUX_MEASUREMENT: energy_values
+      ENERGY_INFLUX_FORECAST_MEASUREMENT: energy_forecasts
+      ENERGY_INFLUX_FORECAST_EVALUATION_MEASUREMENT: forecast_evaluations
+      ENERGY_INFLUX_TOKEN: ${INFLUXDB_TOKEN:?INFLUXDB_TOKEN must be exported before starting backend}
+    depends_on:
+      - influxdb

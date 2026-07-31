@@ -1,17 +1,14 @@
-from datetime import timedelta
-
 import pandas as pd
 import requests
-from openstef_core.datasets import TimeSeriesDataset
 
 
-def fetch_forecast_dataset(
+def fetch_forecast_dataframe(
     base_url: str = "http://localhost:8080",
     target: str = "consumption",
     start: str = "2025-06-01T00:00:00Z",
     end: str = "2025-07-20T00:00:00Z",
     timeout_seconds: int = 30,
-) -> TimeSeriesDataset:
+) -> pd.DataFrame:
     if target not in {"consumption", "generation"}:
         raise ValueError("target must be 'consumption' or 'generation'")
     response = requests.get(
@@ -30,8 +27,36 @@ def fetch_forecast_dataset(
         data["timestamp"] = pd.to_datetime(data["timestamp"], utc=True)
         data = data.set_index("timestamp")[[target_column]]
 
+    return data
+
+
+def fetch_forecast_dataset(
+    base_url: str = "http://localhost:8080",
+    target: str = "consumption",
+    start: str = "2025-06-01T00:00:00Z",
+    end: str = "2025-07-20T00:00:00Z",
+    timeout_seconds: int = 30,
+):
+    from datetime import timedelta
+
+    from openstef_core.datasets import TimeSeriesDataset
+
     return TimeSeriesDataset(
-        data=data,
+        data=fetch_forecast_dataframe(base_url, target, start, end, timeout_seconds),
         sample_interval=timedelta(minutes=15),
         check_frequency=False,
     )
+
+
+def save_forecast_run(
+    payload: dict,
+    base_url: str = "http://localhost:8080",
+    timeout_seconds: int = 30,
+) -> dict:
+    response = requests.post(
+        f"{base_url}/api/forecast-runs",
+        json=payload,
+        timeout=timeout_seconds,
+    )
+    response.raise_for_status()
+    return response.json()

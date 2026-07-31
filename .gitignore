@@ -8,3 +8,9 @@ AGENTS.md
 reference/**
 docs/**
 app/python/__pycache__
+app/python/.venv/
+app/python/mlflow/
+app/reports/
+app/quarkus/target/
+app/influxdb/admin-token.json
+app/influxdb-explorer/
