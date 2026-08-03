@@ -2,10 +2,8 @@
 set -eu
 
 INFLUX_DATABASE="energy"
-INFLUX_TOKEN_FILE="./influxdb/admin-token.json"
 
-INFLUXDB_TOKEN=$(sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INFLUX_TOKEN_FILE")
-export INFLUXDB_TOKEN
+: "${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running this script}"
 
 mkdir -p ./influxdb-explorer/config
 cat > ./influxdb-explorer/config/config.json <<EOF
