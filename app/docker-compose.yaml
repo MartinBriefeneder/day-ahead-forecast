@@ -8,19 +8,20 @@ services:
       - 8181:8181
     restart: unless-stopped
     environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_ORG: docs
-      DOCKER_INFLUXDB_INIT_BUCKET: home
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running docker compose up}
     command:
-      - influxdb3
-      - serve
-      - --admin-token-file=/var/lib/influxdb3/admin-token.json
-      - --node-id=node0
-      - --object-store=file
-      - --data-dir=/var/lib/influxdb3/data
-      - --plugin-dir=/var/lib/influxdb3/plugins
-      - --query-file-limit=30000
-      - --disable-telemetry-upload
+      - /bin/sh
+      - -c
+      - |
+        printf '{\n  "token": "%s",\n  "name": "_admin"\n}\n' "$$INFLUXDB_TOKEN" > /tmp/admin-token.json
+        exec influxdb3 serve \
+          --admin-token-file=/tmp/admin-token.json \
+          --node-id=node0 \
+          --object-store=file \
+          --data-dir=/var/lib/influxdb3/data \
+          --plugin-dir=/var/lib/influxdb3/plugins \
+          --query-file-limit=30000 \
+          --disable-telemetry-upload
     volumes:
       - type: volume
         source: influxdb3-data
@@ -28,11 +29,75 @@ services:
       - type: volume
         source: influxdb3-plugins
         target: /var/lib/influxdb3/plugins
+  influxdb-init:
+    image: influxdb:3-core
+    environment:
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running docker compose up}
+    depends_on:
+      - influxdb
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until influxdb3 query --host http://influxdb:8181 --token "$$INFLUXDB_TOKEN" --database _internal "SHOW TABLES" >/dev/null 2>&1; do
+          sleep 1
+        done
+        influxdb3 create database --host http://influxdb:8181 --token "$$INFLUXDB_TOKEN" energy >/dev/null 2>&1 || true
+  backend:
+    container_name: forecast-backend
+    image: day-ahead-forecast-backend
+    build:
+      context: ./quarkus
+      dockerfile: Dockerfile
+    ports:
+      - 8080:8080
+    environment:
+      ENERGY_INFLUX_URL: http://influxdb:8181
+      ENERGY_INFLUX_DATABASE: energy
+      ENERGY_INFLUX_MEASUREMENT: energy_values
+      ENERGY_INFLUX_FORECAST_MEASUREMENT: energy_forecasts
+      ENERGY_INFLUX_FORECAST_EVALUATION_MEASUREMENT: forecast_evaluations
+      ENERGY_INFLUX_TOKEN: ${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running docker compose up}
+    depends_on:
+      influxdb-init:
+        condition: service_completed_successfully
+  importer:
+    image: day-ahead-forecast-backend
+    build:
+      context: ./quarkus
+      dockerfile: Dockerfile
+    environment:
+      ENERGY_INFLUX_URL: http://influxdb:8181
+      ENERGY_INFLUX_DATABASE: energy
+      ENERGY_INFLUX_MEASUREMENT: energy_values
+      ENERGY_INFLUX_TOKEN: ${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running docker compose up}
+    volumes:
       - type: bind
-        source: ./influxdb/admin-token.json
-        target: /var/lib/influxdb3/admin-token.json
-    secrets:
-      - admin-token
+        source: ./quarkus/data/csv_Archiv
+        target: /import-data
+        read_only: true
+      - type: volume
+        source: import-state
+        target: /import-state
+    depends_on:
+      influxdb-init:
+        condition: service_completed_successfully
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -f /import-state/imported ]; then
+          echo 'CSV data already imported.'
+          exit 0
+        fi
+        java \
+          -Dquarkus.http.host=127.0.0.1 \
+          -Dquarkus.http.port=0 \
+          -Denergy.influx.token="$$ENERGY_INFLUX_TOKEN" \
+          -Denergy.influx.database="$$ENERGY_INFLUX_DATABASE" \
+          -Denergy.import.command.directory=/import-data \
+          -jar quarkus-run.jar
+        touch /import-state/imported
   grafana:
     container_name: grafana
     image: grafana/grafana
@@ -56,40 +121,39 @@ services:
         source: ./grafana/dashboards
         target: /var/lib/grafana/dashboards
         read_only: true
-  # influxdb3-explorer:
-  #   container_name: influxdb3-explorer
-  #   image: influxdata/influxdb3-ui:latest
-  #   command:
-  #     - --mode=admin
-  #   ports:
-  #     - 127.0.0.1:8180:8080
-  #   volumes:
-  #     - type: bind
-  #       source: ./influxdb-explorer/config
-  #       target: /app-root/config
-  #       read_only: true
-  #     - type: volume
-  #       source: influxdb3-explorer-db
-  #       target: /db
-  #   depends_on:
-  #     - influxdb
-  chronograf:
-    container_name: chronograf
-    image: chronograf:latest
-    environment:
-      INFLUXDB_V3_SUPPORT_ENABLED: "true"
-      INFLUXDB_TYPE: influx-v3-core
-      INFLUXDB_URL: http://influxdb:8181
-      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?INFLUXDB_TOKEN must be exported before starting Chronograf}
+  influxdb3-explorer:
+    container_name: influxdb3-explorer
+    image: influxdata/influxdb3-ui:latest
+    command:
+      - --mode=admin
     ports:
-      - 8888:8888
+      - 127.0.0.1:8180:8080
+    volumes:
+      - type: bind
+        source: ./influxdb-explorer/config
+        target: /app-root/config
+        read_only: true
+      - type: volume
+        source: influxdb3-explorer-db
+        target: /db
     depends_on:
       - influxdb
+  # chronograf:
+  #   container_name: chronograf
+  #   image: chronograf:latest
+  #   environment:
+  #     INFLUXDB_V3_SUPPORT_ENABLED: "true"
+  #     INFLUXDB_TYPE: influx-v3-core
+  #     INFLUXDB_URL: http://influxdb:8181
+  #     INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?INFLUXDB_TOKEN must be exported before starting Chronograf}
+  #   ports:
+  #     - 8888:8888
+  #   depends_on:
+  #     influxdb-init:
+  #       condition: service_completed_successfully
 volumes:
   influxdb3-data:
   influxdb3-plugins:
   influxdb3-explorer-db:
   grafana-data:
-secrets:
-  admin-token:
-    file: influxdb/admin-token.json
+  import-state:
