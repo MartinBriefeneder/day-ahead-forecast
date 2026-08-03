@@ -48,9 +48,11 @@ public class ForecastRunService {
         if (!request.forecastEnd().isAfter(request.forecastStart())) {
             throw new IllegalArgumentException("forecastEnd must be after forecastStart");
         }
+        validateTrainWindow(request);
         if (!SAMPLE_INTERVAL.equals(parseSampleInterval(request.sampleInterval()))) {
             throw new IllegalArgumentException("sampleInterval must be PT15M");
         }
+        parseOptionalDuration("horizon", request.horizon());
 
         List<ForecastPoint> points = requireList("points", request.points());
         for (ForecastPoint point : points) {
@@ -61,6 +63,21 @@ public class ForecastRunService {
         for (ForecastMetric metric : metrics) {
             requireText("metric.name", metric.name());
             requireFinite("metric.value", metric.value());
+        }
+    }
+
+    private void validateTrainWindow(ForecastRunRequest request) {
+        if (request.trainStart() == null && request.trainEnd() == null) {
+            return;
+        }
+        if (request.trainStart() == null || request.trainEnd() == null) {
+            throw new IllegalArgumentException("trainStart and trainEnd must be provided together");
+        }
+        if (!request.trainEnd().isAfter(request.trainStart())) {
+            throw new IllegalArgumentException("trainEnd must be after trainStart");
+        }
+        if (request.trainEnd().isAfter(request.forecastStart())) {
+            throw new IllegalArgumentException("trainEnd must not be after forecastStart");
         }
     }
 
@@ -82,6 +99,17 @@ public class ForecastRunService {
             return Duration.parse(requireText("sampleInterval", value));
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException("sampleInterval must use ISO-8601 duration format, for example PT15M", exception);
+        }
+    }
+
+    private void parseOptionalDuration(String name, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        try {
+            Duration.parse(value);
+        } catch (RuntimeException exception) {
+            throw new IllegalArgumentException(name + " must use ISO-8601 duration format, for example PT36H", exception);
         }
     }
 

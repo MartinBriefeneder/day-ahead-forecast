@@ -1,3 +1,4 @@
+import argparse
 import json
 import math
 import html
@@ -6,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from forecast_dataset_api import fetch_forecast_dataframe
+from forecast_dataset_api import fetch_forecast_dataframe, save_forecast_run
 
 BASE_URL = "http://localhost:8080"
 TARGET = "consumption"
@@ -15,6 +16,7 @@ TRAIN_DAYS = 90
 FORECAST_DAYS = 7
 MODELS = ("historical-average", "weekly-persistence")
 OUTPUT_DIR = (Path(__file__).resolve().parent / "../reports/forecast-runs").resolve()
+MODEL_FAMILY = "simple-benchmark"
 
 SAMPLE_INTERVAL = "PT15M"
 SAMPLE_FREQUENCY = "15min"
@@ -95,20 +97,25 @@ def report_payload(
     model: str,
     generated_at: datetime,
     train_start: datetime,
+    train_end: datetime,
     forecast_start: datetime,
     forecast_end: datetime,
     metrics: dict,
     comparison: pd.DataFrame,
+    report_path: Path,
 ) -> dict:
     return {
         "runId": run_id,
         "model": model,
         "target": TARGET,
+        "modelFamily": MODEL_FAMILY,
         "generatedAt": format_utc(generated_at),
         "trainStart": format_utc(train_start),
+        "trainEnd": format_utc(train_end),
         "forecastStart": format_utc(forecast_start),
         "forecastEnd": format_utc(forecast_end),
         "sampleInterval": SAMPLE_INTERVAL,
+        "reportPath": str(report_path),
         "metrics": metrics,
         "points": [
             {
@@ -456,11 +463,59 @@ def build_run_id(model: str, forecast_start: datetime) -> str:
     return f"{TARGET}-{model}-{timestamp}"
 
 
-def main() -> None:
+def backend_payload(payload: dict) -> dict:
+    return {
+        "runId": payload["runId"],
+        "model": payload["model"],
+        "target": payload["target"],
+        "modelFamily": payload.get("modelFamily"),
+        "generatedAt": payload["generatedAt"],
+        "trainStart": payload.get("trainStart"),
+        "trainEnd": payload.get("trainEnd"),
+        "forecastStart": payload["forecastStart"],
+        "forecastEnd": payload["forecastEnd"],
+        "sampleInterval": payload["sampleInterval"],
+        "reportPath": payload.get("reportPath"),
+        "points": [
+            {
+                "timestamp": point["timestamp"],
+                "forecastKwh": point["forecastKwh"],
+                "actualKwh": point.get("actualKwh"),
+            }
+            for point in payload["points"]
+        ],
+        "metrics": [
+            {"name": name, "value": float(value)}
+            for name, value in payload["metrics"].items()
+            if isinstance(value, (int, float)) and pd.notna(value)
+        ],
+    }
+
+
+def save_payloads(payloads: list[dict], *, base_url: str) -> None:
+    for payload in payloads:
+        response = save_forecast_run(backend_payload(payload), base_url=base_url)
+        point_count = response.get("forecastPoints", response.get("pointCount", len(payload["points"])))
+        metric_count = response.get("metrics", response.get("metricCount", len(payload["metrics"])))
+        print(f"Saved {response['runId']} to backend ({point_count} points, {metric_count} metrics)")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run simple benchmark forecast backtests.")
+    parser.add_argument("--base-url", default=BASE_URL)
+    parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
+    parser.add_argument("--no-save", action="store_true", help="Write reports without posting forecast runs to the backend.")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    output_dir = Path(args.output_dir)
+    report_path = output_dir / "forecast-backtest-report.md"
     forecast_start = TRAIN_START + timedelta(days=TRAIN_DAYS)
     forecast_end = forecast_start + timedelta(days=FORECAST_DAYS)
     data = fetch_forecast_dataframe(
-        base_url=BASE_URL,
+        base_url=args.base_url,
         target=TARGET,
         start=format_utc(TRAIN_START),
         end=format_utc(forecast_end),
@@ -492,14 +547,20 @@ def main() -> None:
                 generated_at,
                 TRAIN_START,
                 forecast_start,
+                forecast_start,
                 forecast_end,
                 metrics,
                 comparison,
+                report_path,
             )
         )
 
-    write_reports(OUTPUT_DIR, payloads, actual)
-    print(f"Wrote forecast reports to {OUTPUT_DIR}")
+    write_reports(output_dir, payloads, actual)
+    print(f"Wrote forecast reports to {output_dir}")
+    if args.no_save:
+        print("Skipped backend save (--no-save)")
+    else:
+        save_payloads(payloads, base_url=args.base_url)
     for payload in payloads:
         metrics = payload["metrics"]
         print(

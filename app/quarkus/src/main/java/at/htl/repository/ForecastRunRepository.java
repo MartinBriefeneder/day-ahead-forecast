@@ -33,6 +33,9 @@ public class ForecastRunRepository {
     @ConfigProperty(name = "energy.influx.forecast-evaluation-measurement", defaultValue = "forecast_evaluations")
     String evaluationMeasurement;
 
+    @ConfigProperty(name = "energy.influx.forecast-run-metadata-measurement", defaultValue = "forecast_run_metadata")
+    String metadataMeasurement;
+
     @ConfigProperty(name = "energy.influx.token")
     Optional<String> token;
 
@@ -40,7 +43,8 @@ public class ForecastRunRepository {
     int gzipThresholdBytes;
 
     public void save(ForecastRunRequest request) throws Exception {
-        List<Point> points = new ArrayList<>(request.points().size() + request.metrics().size());
+        List<Point> points = new ArrayList<>(request.points().size() + request.metrics().size() + 1);
+        points.add(toMetadataPoint(request));
         for (ForecastPoint forecastPoint : request.points()) {
             points.add(toForecastPoint(request, forecastPoint));
         }
@@ -111,6 +115,26 @@ public class ForecastRunRepository {
         return point;
     }
 
+    Point toMetadataPoint(ForecastRunRequest request) {
+        Instant generatedAt = Optional.ofNullable(request.generatedAt()).orElseGet(Instant::now);
+        Point point = Point.measurement(metadataMeasurement)
+                .setTag("run_id", request.runId())
+                .setTag("target", request.target())
+                .setTag("model", request.model())
+                .setField("generated_at", generatedAt.toString())
+                .setField("forecast_start", request.forecastStart().toString())
+                .setField("forecast_end", request.forecastEnd().toString())
+                .setField("sample_interval", request.sampleInterval())
+                .setTimestamp(generatedAt);
+
+        setOptionalInstant(point, "train_start", request.trainStart());
+        setOptionalInstant(point, "train_end", request.trainEnd());
+        setOptionalString(point, "horizon", request.horizon());
+        setOptionalString(point, "model_family", request.modelFamily());
+        setOptionalString(point, "report_path", request.reportPath());
+        return point;
+    }
+
     private Point toEvaluationPoint(ForecastRunRequest request, ForecastMetric metric) {
         Instant generatedAt = Optional.ofNullable(request.generatedAt()).orElseGet(Instant::now);
         return Point.measurement(evaluationMeasurement)
@@ -123,6 +147,18 @@ public class ForecastRunRepository {
                 .setTag("sample_interval", request.sampleInterval())
                 .setField("value", metric.value())
                 .setTimestamp(generatedAt);
+    }
+
+    private void setOptionalInstant(Point point, String field, Instant value) {
+        if (value != null) {
+            point.setField(field, value.toString());
+        }
+    }
+
+    private void setOptionalString(Point point, String field, String value) {
+        if (value != null && !value.isBlank()) {
+            point.setField(field, value);
+        }
     }
 
     private String resolvedToken() {

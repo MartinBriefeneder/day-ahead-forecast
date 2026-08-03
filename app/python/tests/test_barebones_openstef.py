@@ -49,6 +49,8 @@ class BarebonesOpenStefTest(unittest.TestCase):
         )
 
         self.assertEqual(MODEL_NAME, payload["model"])
+        self.assertEqual("openstef-xgboost", payload["modelFamily"])
+        self.assertEqual("PT36H", payload["horizon"])
         self.assertEqual([{"name": "mae_kwh", "value": 0.25}], payload["metrics"])
         self.assertEqual(1.25, payload["points"][0]["forecastKwh"])
         self.assertEqual(1.0, payload["points"][0]["actualKwh"])
@@ -96,6 +98,7 @@ class BarebonesOpenStefTest(unittest.TestCase):
         self.assertEqual("generation", args.target)
         self.assertFalse(hasattr(args, "models"))
         self.assertFalse(hasattr(args, "n_trials"))
+        self.assertFalse(args.no_save)
 
 
 if __name__ == "__main__":

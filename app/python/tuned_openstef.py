@@ -121,19 +121,27 @@ def api_payload(
     model: str,
     target: str,
     generated_at: datetime,
+    train_start: datetime | None = None,
+    train_end: datetime | None = None,
     forecast_start: datetime,
     forecast_end: datetime,
     comparison: pd.DataFrame,
     metrics: dict[str, Any],
+    report_path: str | Path | None = None,
 ) -> dict[str, Any]:
     return {
         "runId": run_id_value,
         "model": model,
         "target": target,
+        "modelFamily": "openstef-xgboost",
         "generatedAt": format_utc(generated_at),
+        "trainStart": format_utc(train_start) if train_start is not None else None,
+        "trainEnd": format_utc(train_end) if train_end is not None else None,
         "forecastStart": format_utc(forecast_start),
         "forecastEnd": format_utc(forecast_end),
         "sampleInterval": SAMPLE_INTERVAL,
+        "horizon": HORIZON,
+        "reportPath": str(report_path) if report_path is not None else None,
         "points": [
             {
                 "timestamp": format_utc(index.to_pydatetime()),
@@ -157,6 +165,8 @@ def forecast_payload(
     target: str,
     predict_dataset,
     generated_at: datetime,
+    train_start: datetime,
+    train_end: datetime,
     forecast_start: datetime,
     forecast_end: datetime,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -169,6 +179,8 @@ def forecast_payload(
         model=model,
         target=target,
         generated_at=generated_at,
+        train_start=train_start,
+        train_end=train_end,
         forecast_start=forecast_start,
         forecast_end=forecast_end,
         comparison=comparison,
@@ -317,6 +329,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--weather-path", default=str(DEFAULT_WEATHER_PATH))
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
     parser.add_argument("--no-progress", action="store_true", help="Hide the Optuna progress bar.")
+    parser.add_argument("--no-save", action="store_true", help="Write reports without posting forecast runs to the backend.")
     return parser
 
 
@@ -356,6 +369,8 @@ def main(argv: list[str] | None = None) -> None:
         target=args.target,
         predict_dataset=predict_dataset,
         generated_at=generated_at,
+        train_start=train_start,
+        train_end=train_end,
         forecast_start=forecast_start,
         forecast_end=forecast_end,
     )
@@ -371,6 +386,8 @@ def main(argv: list[str] | None = None) -> None:
         target=args.target,
         predict_dataset=predict_dataset,
         generated_at=generated_at,
+        train_start=train_start,
+        train_end=train_end,
         forecast_start=forecast_start,
         forecast_end=forecast_end,
     )
@@ -399,7 +416,12 @@ def main(argv: list[str] | None = None) -> None:
 
     payloads = [default_payload, tuned_payload]
     report_path = write_run_files(Path(args.output_dir), payloads, metadata)
-    save_payloads(payloads, base_url=args.base_url)
+    for payload in payloads:
+        payload["reportPath"] = str(report_path)
+    if args.no_save:
+        print("Skipped backend save (--no-save)")
+    else:
+        save_payloads(payloads, base_url=args.base_url)
 
     print(f"Wrote tuning report to {report_path}")
     print(f"Default MAE: {default_metrics['mae_kwh']:.4f} kWh")

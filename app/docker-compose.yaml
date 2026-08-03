@@ -59,6 +59,7 @@ services:
       ENERGY_INFLUX_MEASUREMENT: energy_values
       ENERGY_INFLUX_FORECAST_MEASUREMENT: energy_forecasts
       ENERGY_INFLUX_FORECAST_EVALUATION_MEASUREMENT: forecast_evaluations
+      ENERGY_INFLUX_FORECAST_RUN_METADATA_MEASUREMENT: forecast_run_metadata
       ENERGY_INFLUX_TOKEN: ${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running docker compose up}
     depends_on:
       influxdb-init:

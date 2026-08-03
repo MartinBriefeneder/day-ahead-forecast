@@ -118,4 +118,5 @@ Important properties:
 - `energy.influx.measurement`
 - `energy.influx.forecast-measurement`
 - `energy.influx.forecast-evaluation-measurement`
+- `energy.influx.forecast-run-metadata-measurement`
 - `energy.influx.token`

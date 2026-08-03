@@ -36,12 +36,15 @@ class ForecastRunServiceTest {
         ForecastRunRequest valid = validRequest();
 
         assertThrows(IllegalArgumentException.class, () -> service.save(null));
-        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest("", valid.model(), valid.target(), valid.generatedAt(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), valid.points(), valid.metrics())));
-        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), "other", valid.generatedAt(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), valid.points(), valid.metrics())));
-        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.forecastEnd(), valid.forecastStart(), valid.sampleInterval(), valid.points(), valid.metrics())));
-        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.forecastStart(), valid.forecastEnd(), "PT1H", valid.points(), valid.metrics())));
-        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), List.of(), valid.metrics())));
-        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), valid.points(), List.of())));
+        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest("", valid.model(), valid.target(), valid.generatedAt(), valid.trainStart(), valid.trainEnd(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), valid.horizon(), valid.modelFamily(), valid.reportPath(), valid.points(), valid.metrics())));
+        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), "other", valid.generatedAt(), valid.trainStart(), valid.trainEnd(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), valid.horizon(), valid.modelFamily(), valid.reportPath(), valid.points(), valid.metrics())));
+        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.trainStart(), valid.trainEnd(), valid.forecastEnd(), valid.forecastStart(), valid.sampleInterval(), valid.horizon(), valid.modelFamily(), valid.reportPath(), valid.points(), valid.metrics())));
+        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.trainStart(), valid.trainEnd(), valid.forecastStart(), valid.forecastEnd(), "PT1H", valid.horizon(), valid.modelFamily(), valid.reportPath(), valid.points(), valid.metrics())));
+        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.trainStart(), valid.trainEnd(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), valid.horizon(), valid.modelFamily(), valid.reportPath(), List.of(), valid.metrics())));
+        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.trainStart(), valid.trainEnd(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), valid.horizon(), valid.modelFamily(), valid.reportPath(), valid.points(), List.of())));
+        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.trainStart(), null, valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), valid.horizon(), valid.modelFamily(), valid.reportPath(), valid.points(), valid.metrics())));
+        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.trainStart(), valid.trainStart(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), valid.horizon(), valid.modelFamily(), valid.reportPath(), valid.points(), valid.metrics())));
+        assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.trainStart(), valid.trainEnd(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), "tomorrow", valid.modelFamily(), valid.reportPath(), valid.points(), valid.metrics())));
     }
 
     private ForecastRunService serviceWithRepository(ForecastRunRepository repository) throws Exception {
@@ -58,9 +61,14 @@ class ForecastRunServiceTest {
                 "historical-average",
                 "consumption",
                 Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2025-11-01T00:00:00Z"),
+                Instant.parse("2025-12-01T00:00:00Z"),
                 Instant.parse("2025-12-01T00:00:00Z"),
                 Instant.parse("2025-12-02T00:00:00Z"),
                 "PT15M",
+                null,
+                "simple-benchmark",
+                "app/reports/forecast-runs/forecast-backtest-report.md",
                 List.of(
                         new ForecastPoint(Instant.parse("2025-12-01T00:00:00Z"), 12.5, 12.0),
                         new ForecastPoint(Instant.parse("2025-12-01T00:15:00Z"), 13.0, null)

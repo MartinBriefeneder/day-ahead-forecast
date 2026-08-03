@@ -31,11 +31,15 @@ The script creates `.venv` when it is missing.
 
 It installs the requirements and runs `main.py`.
 
-The runner has no command-line arguments.
+The runner supports `--base-url`, `--output-dir`, and `--no-save`.
 
 Change the constants at the top of `main.py` if you need another target or date window.
 
 This runner tests energy-only benchmark models.
+
+It saves forecast runs to the backend by default.
+
+Use `../run-forecast.sh --no-save` to write reports without saving forecast runs.
 
 The runner writes these files under `app/reports/forecast-runs/`:
 
@@ -57,6 +61,8 @@ Start the local services and Quarkus first. Then run:
 The barebones runner fetches energy data from the backend.
 
 It joins local historical weather features, trains one default OpenSTEF XGBoost workflow, writes reports, creates a comparison plot, and sends the forecast run to the backend.
+
+Use `--no-save` to write reports without saving the forecast run.
 
 Useful options:
 
@@ -91,6 +97,8 @@ The tuned runner fetches energy data from the backend.
 
 It joins local historical weather features, trains one default OpenSTEF XGBoost workflow, runs Optuna tuning, trains the tuned workflow, writes reports, creates a comparison plot, and sends both forecast runs to the backend.
 
+Use `--no-save` to write reports without saving the forecast runs.
+
 Useful options:
 
 - `--target generation`
@@ -100,6 +108,7 @@ Useful options:
 - `--forecast-days 7`
 - `--n-trials 10`
 - `--no-progress`
+- `--no-save`
 
 The runner writes these files under `app/reports/forecast-runs/`:
 

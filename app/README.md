@@ -104,11 +104,19 @@ The script creates `python/.venv` when it is missing.
 
 It installs `python/requirements.txt` and runs `python/main.py`.
 
-The runner has no command-line arguments.
+The runner supports `--base-url`, `--output-dir`, and `--no-save`.
 
 Change the constants at the top of `python/main.py` for local experiments.
 
 The runner writes JSON, Markdown, and a Plotly HTML dashboard to `reports/forecast-runs/` by default.
+
+It also saves forecast runs to the backend by default so they can be queried from InfluxDB and Grafana.
+
+Use report-only mode when you do not want backend persistence:
+
+```bash
+./run-forecast.sh --no-save
+```
 
 The weather inspection command writes to `reports/weather-inspection-report.md`. It does not call an external weather API.
 
