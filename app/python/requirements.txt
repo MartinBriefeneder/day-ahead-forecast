@@ -1,4 +1,4 @@
-openstef-models
+openstef-models[tuning,xgb-cpu]
 openstef-beam
 pandas
 requests

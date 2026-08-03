@@ -45,6 +45,8 @@ services:
         influxdb3 create database --host http://influxdb:8181 --token "$$INFLUXDB_TOKEN" energy >/dev/null 2>&1 || true
   backend:
     container_name: forecast-backend
+    profiles:
+      - server
     image: day-ahead-forecast-backend
     build:
       context: ./quarkus
@@ -62,6 +64,8 @@ services:
       influxdb-init:
         condition: service_completed_successfully
   importer:
+    profiles:
+      - import
     image: day-ahead-forecast-backend
     build:
       context: ./quarkus
@@ -121,6 +125,9 @@ services:
         source: ./grafana/dashboards
         target: /var/lib/grafana/dashboards
         read_only: true
+    depends_on:
+      influxdb-init:
+        condition: service_completed_successfully
   influxdb3-explorer:
     container_name: influxdb3-explorer
     image: influxdata/influxdb3-ui:latest
@@ -137,7 +144,8 @@ services:
         source: influxdb3-explorer-db
         target: /db
     depends_on:
-      - influxdb
+      influxdb-init:
+        condition: service_completed_successfully
   # chronograf:
   #   container_name: chronograf
   #   image: chronograf:latest

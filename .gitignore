@@ -12,5 +12,6 @@ app/python/.venv/
 app/python/mlflow/
 app/reports/
 app/quarkus/target/
+app/.env
 app/influxdb/admin-token.json
 app/influxdb-explorer/

@@ -1,69 +1,121 @@
-# backend
+# Quarkus Backend
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+This backend is the API and import service for the local forecast app.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+It uses Java 21, Quarkus, and InfluxDB 3.
 
-## Running the application in dev mode
+The backend can:
 
-You can run your application in dev mode that enables live coding using:
+- import and validate historical energy CSV files.
+- write quarter-hour energy values to InfluxDB.
+- serve forecast datasets at `GET /api/forecast-datasets`.
+- save forecast runs at `POST /api/forecast-runs`.
+- compare a forecast run with actual values at `GET /api/forecast-runs/{runId}/comparison`.
 
-```shell script
-./mvnw quarkus:dev
+Run all commands in this file from `app/quarkus`.
+
+## Requirements
+
+- Java 21
+- Local InfluxDB from the Docker stack when the backend reads or writes data
+- `INFLUXDB_TOKEN` with access to the local `energy` database
+
+## Start Dev Mode
+
+Start only the backend in Quarkus dev mode:
+
+```bash
+./mvnw -Denergy.influx.token="$INFLUXDB_TOKEN" quarkus:dev
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+Use `../run-dev.sh` if you also need InfluxDB, Grafana, and InfluxDB Explorer.
 
-## Packaging and running the application
+Quarkus Dev UI is available only in dev mode:
 
-The application can be packaged using:
+```text
+http://localhost:8080/q/dev/
+```
 
-```shell script
+## Run Tests
+
+Run all backend unit tests:
+
+```bash
+./mvnw test
+```
+
+Run one test class:
+
+```bash
+./mvnw -Dtest=EnergyCsvImportServiceTest test
+```
+
+## Build And Run
+
+Build the backend:
+
+```bash
 ./mvnw package
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+The build writes the runnable app to `target/quarkus-app/`.
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
+Run the built app:
 
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
+```bash
+java -Denergy.influx.token="$INFLUXDB_TOKEN" -jar target/quarkus-app/quarkus-run.jar
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+## Import CSV Files
 
-## Creating a native executable
+For normal local imports, use the reset script:
 
-You can create a native executable using:
-
-```shell script
-./mvnw package -Dnative
+```bash
+../reset-and-import-data.sh
 ```
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
+Use direct backend command mode only when you do not need the reset script:
 
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
+```bash
+./mvnw package
+java -Denergy.influx.token="$INFLUXDB_TOKEN" \
+  -Denergy.import.command.directory=data/csv_Archiv \
+  -jar target/quarkus-app/quarkus-run.jar
 ```
 
-You can then execute your native executable with: `./target/backend-1.0-SNAPSHOT-runner`
+The backend imports all `.csv` files in the directory.
 
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
+It exits when the import is complete.
 
-## Related Guides
+## Validate CSV Files
 
-- REST ([guide](https://quarkus.io/guides/rest)): Build RESTful web services and APIs using Jakarta REST (formerly
-  JAX-RS)
-- REST Jackson ([guide](https://quarkus.io/guides/rest#json-serialisation)): Jackson serialization support for Quarkus
-  REST. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it
+Build the backend first:
 
-## Provided Code
+```bash
+./mvnw package
+```
 
-### REST
+Generate a CSV validation report:
 
-Easily start your REST Web Services
+```bash
+java -Denergy.validation.input=data/csv_Archiv \
+  -Denergy.validation.report=target/energy-csv-validation-report.md \
+  -jar target/quarkus-app/quarkus-run.jar
+```
 
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+The command writes the report to `target/energy-csv-validation-report.md`.
+
+It exits with status `1` if validation finds errors.
+
+## Configuration
+
+The default backend configuration is in `src/main/resources/application.properties`.
+
+Important properties:
+
+- `energy.influx.url`
+- `energy.influx.database`
+- `energy.influx.measurement`
+- `energy.influx.forecast-measurement`
+- `energy.influx.forecast-evaluation-measurement`
+- `energy.influx.token`

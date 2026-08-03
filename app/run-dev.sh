@@ -1,9 +1,31 @@
 #!/usr/bin/env sh
 set -eu
 
-INFLUX_DATABASE="energy"
+SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+cd "$SCRIPT_DIR"
 
-: "${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running this script}"
+INFLUX_DATABASE="energy"
+INFLUX_WAIT_SECONDS="${INFLUX_WAIT_SECONDS:-60}"
+
+if [ -f ./.env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
+: "${INFLUXDB_TOKEN:?set INFLUXDB_TOKEN or create app/.env before running this script}"
+
+wait_for_influx() {
+  attempts=0
+  until docker compose exec -T influxdb influxdb3 query --token "$INFLUXDB_TOKEN" --database _internal "SHOW TABLES" >/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge "$INFLUX_WAIT_SECONDS" ]; then
+      printf 'Timed out waiting for InfluxDB after %s seconds. Check Docker and INFLUXDB_TOKEN.\n' "$INFLUX_WAIT_SECONDS" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+}
 
 mkdir -p ./influxdb-explorer/config
 cat > ./influxdb-explorer/config/config.json <<EOF
@@ -15,11 +37,11 @@ cat > ./influxdb-explorer/config/config.json <<EOF
 }
 EOF
 
-docker compose up -d
+docker compose --profile server stop backend >/dev/null 2>&1 || true
+docker compose up -d influxdb influxdb-init grafana influxdb3-explorer
 
-until docker exec influxdb influxdb3 query --token "$INFLUXDB_TOKEN" --database _internal "SHOW TABLES" >/dev/null 2>&1; do
-  sleep 1
-done
+printf 'Waiting for InfluxDB...\n'
+wait_for_influx
 
 cd ./quarkus
 ./mvnw -Denergy.influx.token="$INFLUXDB_TOKEN" quarkus:dev
