@@ -7,4 +7,4 @@ if [ ! -d .venv ]; then
 fi
 source .venv/bin/activate
 pip install -r requirements.txt
-python3 main.py "$@"
+python3 main.py
