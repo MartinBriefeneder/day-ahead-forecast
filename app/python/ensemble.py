@@ -3,13 +3,22 @@ from datetime import datetime, timedelta
 
 from forecast_dataset_api import fetch_forecast_dataset
 
-train_start = datetime.fromisoformat("2025-06-01T00:00:00Z")
+# The local weather workbook starts on 2025-06-11; this smoke window avoids unresolved DST rows.
+train_start = datetime.fromisoformat("2025-06-11T00:00:00+00:00")
 forecast_target = "consumption"
 target_label = {
     "consumption": "Consumption",
     "generation": "Generation",
 }[forecast_target]
-train_days = 200
+use_weather = True
+weather_features = (
+    "temperature_2m",
+    "relative_humidity_2m",
+    "wind_speed_10m",
+    "shortwave_radiation",
+    "surface_pressure",
+)
+train_days = 90
 forecast_days = 7
 train_end = train_start + timedelta(days=train_days)
 forecast_end = train_end + timedelta(days=forecast_days)
@@ -23,6 +32,9 @@ dataset = fetch_forecast_dataset(
     target=forecast_target,
     start=format_utc(train_start),
     end=format_utc(forecast_end),
+    include_weather=use_weather,
+    weather_features=weather_features,
+    require_complete_weather=use_weather,
 )
 
 train_dataset = dataset.filter_by_range(start=train_start, end=train_end)
@@ -46,33 +58,46 @@ print(
     f"Predict:   {predict_dataset.data.shape[0]:,} rows, "
     f"{predict_dataset.data.index.min():%Y-%m-%d} to {predict_dataset.data.index.max():%Y-%m-%d}"
 )
+weather_diagnostics = dataset.data.attrs.get("weather_diagnostics")
+if weather_diagnostics:
+    alignment = weather_diagnostics["alignment"]
+    print(
+        f"Weather:   {alignment['alignedWeatherIntervalCount']:,} aligned rows, "
+        f"{alignment['missingWeatherIntervalCount']:,} missing rows"
+    )
 
 # configure the workflow
 
 from openstef_core.types import LeadTime, Q
-from openstef_models.presets import ForecastingWorkflowConfig, create_forecasting_workflow
 
 from openstef_meta.presets import EnsembleForecastingWorkflowConfig, create_ensemble_forecasting_workflow
 
-ensemble_config = EnsembleForecastingWorkflowConfig(
-    model_id="ensemble_demo",
+config_options = {
+    "model_id": "ensemble_demo",
     # Ensemble architecture
-    ensemble_type="learned_weights",
-    base_models=["lgbm", "gblinear"],
-    combiner_model="lgbm",
+    "ensemble_type": "learned_weights",
+    "base_models": ["lgbm", "gblinear"],
+    "combiner_model": "lgbm",
     # Forecast settings
-    horizons=[LeadTime.from_string("PT36H")],
-    quantiles=[Q(0.5), Q(0.1), Q(0.9)],
+    "horizons": [LeadTime.from_string("PT36H")],
+    "quantiles": [Q(0.5), Q(0.1), Q(0.9)],
     # Data columns
-    target_column=forecast_target,
-    temperature_column="temperature_2m",
-    relative_humidity_column="relative_humidity_2m",
-    wind_speed_column="wind_speed_10m",
-    radiation_column="shortwave_radiation",
-    pressure_column="surface_pressure",
+    "target_column": forecast_target,
     # Disable MLFlow for tutorial
-    mlflow_storage=None,
-)
+    "mlflow_storage": None,
+}
+if use_weather:
+    config_options.update(
+        {
+            "temperature_column": "temperature_2m",
+            "relative_humidity_column": "relative_humidity_2m",
+            "wind_speed_column": "wind_speed_10m",
+            "radiation_column": "shortwave_radiation",
+            "pressure_column": "surface_pressure",
+        }
+    )
+
+ensemble_config = EnsembleForecastingWorkflowConfig(**config_options)
 
 print(f"Base models:    {list(ensemble_config.base_models)}")
 print(f"Ensemble type:  {ensemble_config.ensemble_type}")

@@ -46,11 +46,11 @@ The setup creates `app/influxdb/admin-token.json` automatically when missing, bu
 
 ## Local Forecast Experiments
 
-The Python forecast runner lives in `python/` and consumes the Quarkus forecast dataset API.
+The Python forecast runner lives in `python/` and consumes the Quarkus forecast dataset API. Weather-enabled experiments still fetch energy data through Quarkus and add local historical weather features in Python.
 
 - Simple benchmark backtest: `./run-forecast.sh`
 - The runner has no command-line arguments; adjust the constants at the top of `python/main.py` for local experiments.
 
 `python/main.py` evaluates energy-only benchmark models. Use `python/ensemble.py` for the OpenSTEF baseline/ensemble experiment.
 
-The command requires the local services and Quarkus backend to be running first. Reports are written to `app/reports/forecast-runs/` by default. See `python/README.md` for current limitations.
+The command requires the local services and Quarkus backend to be running first. Reports are written to `app/reports/forecast-runs/` by default. The weather inspection command writes to `app/reports/weather-inspection-report.md` and does not call an external weather API. See `python/README.md` for current limitations.
