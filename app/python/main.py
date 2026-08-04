@@ -18,12 +18,18 @@ MODELS = ("historical-average", "weekly-persistence")
 OUTPUT_DIR = (Path(__file__).resolve().parent / "../reports/forecast-runs").resolve()
 MODEL_FAMILY = "simple-benchmark"
 
-SAMPLE_INTERVAL = "PT15M"
-SAMPLE_FREQUENCY = "15min"
+SAMPLE_INTERVAL = timedelta(minutes=15)
 
 
 def format_utc(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def format_iso8601_duration(value: timedelta) -> str:
+    seconds = int(value.total_seconds())
+    if seconds % 60 != 0:
+        raise ValueError("Sample interval must use whole minutes")
+    return f"PT{seconds // 60}M"
 
 
 def historical_average_forecast(train: pd.Series, forecast_index: pd.DatetimeIndex) -> pd.Series:
@@ -114,7 +120,7 @@ def report_payload(
         "trainEnd": format_utc(train_end),
         "forecastStart": format_utc(forecast_start),
         "forecastEnd": format_utc(forecast_end),
-        "sampleInterval": SAMPLE_INTERVAL,
+        "sampleInterval": format_iso8601_duration(SAMPLE_INTERVAL),
         "reportPath": str(report_path),
         "metrics": metrics,
         "points": [
@@ -528,7 +534,7 @@ def main(argv: list[str] | None = None) -> None:
     if train.empty:
         raise ValueError("Training dataset is empty for the selected range.")
 
-    forecast_index = pd.date_range(forecast_start, forecast_end, freq=SAMPLE_FREQUENCY, tz="UTC", inclusive="left")
+    forecast_index = pd.date_range(forecast_start, forecast_end, freq=SAMPLE_INTERVAL, tz="UTC", inclusive="left")
     generated_at = datetime.now(timezone.utc)
     payloads = []
     for model in MODELS:
