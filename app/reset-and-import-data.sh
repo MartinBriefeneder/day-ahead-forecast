@@ -8,19 +8,12 @@ INFLUX_DATABASE="energy"
 INFLUX_WAIT_SECONDS="${INFLUX_WAIT_SECONDS:-60}"
 DEFAULT_IMPORT_DIR="./quarkus/data/csv_Archiv"
 IMPORT_DIR_INPUT="${1:-$DEFAULT_IMPORT_DIR}"
+export INFLUXDB_TOKEN=apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg
 
 if [ "${1:-}" = "--help" ]; then
   printf 'Usage: %s [csv-directory]\n' "$0"
   exit 0
 fi
-
-if [ -f ./.env ]; then
-  set -a
-  . ./.env
-  set +a
-fi
-
-: "${INFLUXDB_TOKEN:?set INFLUXDB_TOKEN or create app/.env before running this script}"
 
 wait_for_influx() {
   attempts=0
@@ -67,4 +60,3 @@ docker compose --profile server run --rm --no-deps \
   -Denergy.influx.database="$INFLUX_DATABASE" \
   -Denergy.import.command.directory=/import-data \
   -jar quarkus-run.jar
-printf 'Import complete. Run ./run-dev.sh for development or ./run-server.sh for the Docker backend.\n'

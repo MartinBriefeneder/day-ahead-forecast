@@ -1,5 +1,4 @@
 import argparse
-import json
 import math
 import html
 from datetime import datetime, timedelta, timezone
@@ -7,13 +6,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from forecast_dataset_api import fetch_forecast_dataframe, save_forecast_run
+from forecast_dataset_api import fetch_forecast_dataframe
 
 BASE_URL = "http://localhost:8080"
 TARGET = "consumption"
 TRAIN_START = datetime(2025, 6, 1, tzinfo=timezone.utc)
 TRAIN_DAYS = 90
-FORECAST_DAYS = 7
+DEFAULT_FORECAST_WEEKS = 1
+MAX_FORECAST_WEEKS = 4
 MODELS = ("historical-average", "weekly-persistence")
 OUTPUT_DIR = (Path(__file__).resolve().parent / "../reports/forecast-runs").resolve()
 MODEL_FAMILY = "simple-benchmark"
@@ -30,6 +30,20 @@ def format_iso8601_duration(value: timedelta) -> str:
     if seconds % 60 != 0:
         raise ValueError("Sample interval must use whole minutes")
     return f"PT{seconds // 60}M"
+
+
+def format_iso8601_days(value: timedelta) -> str:
+    days = value.days
+    if value != timedelta(days=days):
+        raise ValueError("Horizon must use whole days")
+    return f"P{days}D"
+
+
+def parse_utc_argument(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def historical_average_forecast(train: pd.Series, forecast_index: pd.DatetimeIndex) -> pd.Series:
@@ -64,12 +78,36 @@ def weekly_persistence_forecast(history: pd.Series, forecast_index: pd.DatetimeI
     return pd.Series(values, index=forecast_index, name="forecast_kwh")
 
 
+def resolve_windows(args: argparse.Namespace) -> tuple[datetime, datetime, datetime, timedelta]:
+    if args.train_days <= 0:
+        raise ValueError("train-days must be positive")
+    if args.forecast_weeks <= 0 or args.forecast_weeks > MAX_FORECAST_WEEKS:
+        raise ValueError(f"forecast-weeks must be between 1 and {MAX_FORECAST_WEEKS}")
+
+    horizon = timedelta(weeks=args.forecast_weeks)
+    if args.forecast_start:
+        forecast_start = parse_utc_argument(args.forecast_start)
+        train_start = parse_utc_argument(args.train_start) if args.train_start else forecast_start - timedelta(days=args.train_days)
+    else:
+        train_start = parse_utc_argument(args.train_start) if args.train_start else TRAIN_START
+        forecast_start = train_start + timedelta(days=args.train_days)
+
+    return train_start, forecast_start, forecast_start + horizon, horizon
+
+
 def compute_metrics(forecast: pd.Series, actual: pd.Series) -> tuple[dict, pd.DataFrame]:
     comparison = pd.DataFrame({"forecast_kwh": forecast, "actual_kwh": actual.reindex(forecast.index)})
     comparison["error_kwh"] = comparison["forecast_kwh"] - comparison["actual_kwh"]
     aligned = comparison.dropna(subset=["forecast_kwh", "actual_kwh"])
+
+    metrics = {
+        "forecast_intervals": int(len(comparison)),
+        "aligned_intervals": int(len(aligned)),
+        "missing_actual_intervals": int(comparison["actual_kwh"].isna().sum()),
+        "total_forecast_kwh": float(comparison["forecast_kwh"].sum()),
+    }
     if aligned.empty:
-        raise ValueError("No aligned forecast/actual intervals are available for evaluation")
+        return metrics, comparison
 
     error = aligned["error_kwh"]
     actual_abs = aligned["actual_kwh"].abs()
@@ -79,18 +117,14 @@ def compute_metrics(forecast: pd.Series, actual: pd.Series) -> tuple[dict, pd.Da
     daily_error = aligned.resample("1D").sum(numeric_only=True)
     daily_energy_error = daily_error["forecast_kwh"] - daily_error["actual_kwh"]
 
-    metrics = {
-        "forecast_intervals": int(len(comparison)),
-        "aligned_intervals": int(len(aligned)),
-        "missing_actual_intervals": int(comparison["actual_kwh"].isna().sum()),
+    metrics.update({
         "mae_kwh": float(error.abs().mean()),
         "rmse_kwh": float(math.sqrt((error ** 2).mean())),
         "bias_kwh": float(error.mean()),
-        "total_forecast_kwh": float(aligned["forecast_kwh"].sum()),
         "total_actual_kwh": float(aligned["actual_kwh"].sum()),
         "total_energy_error_kwh": float(error.sum()),
         "mean_abs_daily_energy_error_kwh": float(daily_energy_error.abs().mean()),
-    }
+    })
     if percentage_base.any():
         metrics["mape_percent"] = float((error[percentage_base].abs() / actual_abs[percentage_base]).mean() * 100)
     if smape_base.any():
@@ -101,19 +135,20 @@ def compute_metrics(forecast: pd.Series, actual: pd.Series) -> tuple[dict, pd.Da
 def report_payload(
     run_id: str,
     model: str,
+    target: str,
     generated_at: datetime,
     train_start: datetime,
     train_end: datetime,
     forecast_start: datetime,
     forecast_end: datetime,
+    horizon: timedelta,
     metrics: dict,
     comparison: pd.DataFrame,
-    report_path: Path,
 ) -> dict:
     return {
         "runId": run_id,
         "model": model,
-        "target": TARGET,
+        "target": target,
         "modelFamily": MODEL_FAMILY,
         "generatedAt": format_utc(generated_at),
         "trainStart": format_utc(train_start),
@@ -121,7 +156,8 @@ def report_payload(
         "forecastStart": format_utc(forecast_start),
         "forecastEnd": format_utc(forecast_end),
         "sampleInterval": format_iso8601_duration(SAMPLE_INTERVAL),
-        "reportPath": str(report_path),
+        "horizon": format_iso8601_days(horizon),
+        "reportPath": None,
         "metrics": metrics,
         "points": [
             {
@@ -135,61 +171,14 @@ def report_payload(
     }
 
 
-def write_reports(output_dir: Path, payloads: list[dict], actual: pd.Series | None = None) -> None:
+def write_reports(output_dir: Path, payloads: list[dict], actual: pd.Series | None = None) -> Path | None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    for payload in payloads:
-        json_path = output_dir / f"{payload['runId']}.json"
-        json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
     include_dashboard = actual is not None and payloads
-    markdown_path = output_dir / "forecast-backtest-report.md"
-    markdown_path.write_text(markdown_report(payloads, include_dashboard=include_dashboard), encoding="utf-8")
-
     if include_dashboard:
         dashboard_path = output_dir / "forecast-backtest-dashboard.html"
         dashboard_path.write_text(backtest_dashboard_html(payloads, actual), encoding="utf-8")
-
-
-def markdown_report(payloads: list[dict], include_dashboard: bool = False) -> str:
-    lines = ["# Forecast Backtest Report", ""]
-    if not payloads:
-        return "# Forecast Backtest Report\n\nNo forecast runs were produced.\n"
-
-    first = payloads[0]
-    lines.extend([
-        f"- Target: `{first['target']}`",
-        f"- Forecast window: `{first['forecastStart']}` to `{first['forecastEnd']}`",
-        f"- Sample interval: `{first['sampleInterval']}`",
-        "",
-        "## Metrics",
-        "",
-        "| Model | Aligned intervals | MAE kWh | RMSE kWh | Bias kWh | Total error kWh | MAPE % | sMAPE % |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
-    ])
-    for payload in payloads:
-        metrics = payload["metrics"]
-        lines.append(
-            "| "
-            + " | ".join([
-                payload["model"],
-                str(metrics.get("aligned_intervals", "")),
-                format_metric(metrics.get("mae_kwh")),
-                format_metric(metrics.get("rmse_kwh")),
-                format_metric(metrics.get("bias_kwh")),
-                format_metric(metrics.get("total_energy_error_kwh")),
-                format_metric(metrics.get("mape_percent")),
-                format_metric(metrics.get("smape_percent")),
-            ])
-            + " |"
-        )
-
-    lines.extend(["", "## Run Files", ""])
-    for payload in payloads:
-        lines.append(f"- `{payload['runId']}.json`")
-    if include_dashboard:
-        lines.append("- `forecast-backtest-dashboard.html`")
-    lines.append("")
-    return "\n".join(lines)
+        return dashboard_path
+    return None
 
 
 def backtest_dashboard_html(payloads: list[dict], actual: pd.Series) -> str:
@@ -264,7 +253,7 @@ def backtest_dashboard_html(payloads: list[dict], actual: pd.Series) -> str:
             col=1,
         )
 
-        daily = frame.dropna(subset=["forecast_kwh", "actual_kwh"]).resample("1D").sum(numeric_only=True)
+        daily = frame.dropna(subset=["forecast_kwh"]).resample("1D").sum(numeric_only=True)
         fig.add_trace(
             go.Bar(
                 x=daily.index,
@@ -316,7 +305,7 @@ def backtest_dashboard_html(payloads: list[dict], actual: pd.Series) -> str:
         x1=forecast_end,
         fillcolor="rgba(59,130,246,0.08)",
         line_width=0,
-        annotation_text="backtest window",
+        annotation_text="forecast window",
         annotation_position="top left",
         row=1,
         col=1,
@@ -324,7 +313,7 @@ def backtest_dashboard_html(payloads: list[dict], actual: pd.Series) -> str:
     fig.add_hline(y=0, line_color="#64748b", line_dash="dash", row=2, col=1)
     fig.add_hline(y=0, line_color="#64748b", line_dash="dash", row=4, col=1)
     fig.update_layout(
-        title=f"{first['target'].capitalize()} Backtest Dashboard",
+        title=f"{first['target'].capitalize()} Forecast Dashboard",
         template="plotly_white",
         hovermode="x unified",
         height=1180,
@@ -344,7 +333,7 @@ def backtest_dashboard_html(payloads: list[dict], actual: pd.Series) -> str:
             "<html lang=\"en\">",
             "<head>",
             "<meta charset=\"utf-8\">",
-            "<title>Forecast Backtest Dashboard</title>",
+            "<title>Forecast Dashboard</title>",
             "<style>",
             "body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:24px;background:#f8fafc;color:#0f172a}",
             ".shell{max-width:1440px;margin:0 auto}",
@@ -362,17 +351,21 @@ def backtest_dashboard_html(payloads: list[dict], actual: pd.Series) -> str:
             "</head>",
             "<body><main class=\"shell\">",
             "<section class=\"card\">",
-            f"<h1>{html.escape(first['target'].capitalize())} Backtest Dashboard</h1>",
-            "<p>This report shows which data trained the model, where the historical forecast starts, and how the forecast compares with the actual values.</p>",
+            f"<h1>{html.escape(first['target'].capitalize())} Forecast Dashboard</h1>",
+            "<p>This report shows the training window, forecast window, forecast quality when actual values exist, and expected energy totals.</p>",
             "<div class=\"meta\">",
             meta_item("Training start", first["trainStart"]),
             meta_item("Forecast start", first["forecastStart"]),
             meta_item("Forecast end", first["forecastEnd"]),
             meta_item("Sample interval", first["sampleInterval"]),
+            meta_item("Horizon", first["horizon"]),
             "</div></section>",
             "<section class=\"card\"><h2>Metric Summary</h2>",
             metric_cards(payloads),
             metric_table(payloads),
+            "</section>",
+            "<section class=\"card\"><h2>Expected Energy Totals</h2>",
+            aggregate_tables(payloads),
             "</section>",
             "<section class=\"card\">",
             fig.to_html(full_html=False, include_plotlyjs=True),
@@ -452,6 +445,37 @@ def metric_table(payloads: list[dict]) -> str:
     )
 
 
+def aggregate_tables(payloads: list[dict]) -> str:
+    sections = []
+    for payload in payloads:
+        frame = payload_comparison_frame(payload)
+        daily = frame.dropna(subset=["forecast_kwh"]).resample("1D").sum(numeric_only=True)
+        weekly = frame.dropna(subset=["forecast_kwh"]).resample("W-MON", label="left", closed="left").sum(numeric_only=True)
+        sections.append(f"<h3>{html.escape(payload['model'])}</h3>")
+        sections.append(aggregate_table("Daily", daily))
+        sections.append(aggregate_table("Weekly", weekly))
+    return "".join(sections)
+
+
+def aggregate_table(label: str, frame: pd.DataFrame) -> str:
+    rows = []
+    for timestamp, row in frame.iterrows():
+        actual = row.get("actual_kwh")
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(timestamp.isoformat())}</td>"
+            f"<td>{format_metric(row.get('forecast_kwh'))}</td>"
+            f"<td>{format_metric(actual) if pd.notna(actual) else ''}</td>"
+            "</tr>"
+        )
+    return (
+        f"<h4>{html.escape(label)} totals</h4>"
+        "<table><thead><tr><th>Start</th><th>Forecast kWh</th><th>Actual kWh</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
 def format_metric(value: object) -> str:
     if value is None:
         return ""
@@ -464,73 +488,38 @@ def none_if_nan(value: object) -> float | None:
     return float(value)
 
 
-def build_run_id(model: str, forecast_start: datetime) -> str:
+def build_run_id(target: str, model: str, forecast_start: datetime) -> str:
     timestamp = forecast_start.strftime("%Y%m%dT%H%M%SZ")
-    return f"{TARGET}-{model}-{timestamp}"
-
-
-def backend_payload(payload: dict) -> dict:
-    return {
-        "runId": payload["runId"],
-        "model": payload["model"],
-        "target": payload["target"],
-        "modelFamily": payload.get("modelFamily"),
-        "generatedAt": payload["generatedAt"],
-        "trainStart": payload.get("trainStart"),
-        "trainEnd": payload.get("trainEnd"),
-        "forecastStart": payload["forecastStart"],
-        "forecastEnd": payload["forecastEnd"],
-        "sampleInterval": payload["sampleInterval"],
-        "reportPath": payload.get("reportPath"),
-        "points": [
-            {
-                "timestamp": point["timestamp"],
-                "forecastKwh": point["forecastKwh"],
-                "actualKwh": point.get("actualKwh"),
-            }
-            for point in payload["points"]
-        ],
-        "metrics": [
-            {"name": name, "value": float(value)}
-            for name, value in payload["metrics"].items()
-            if isinstance(value, (int, float)) and pd.notna(value)
-        ],
-    }
-
-
-def save_payloads(payloads: list[dict], *, base_url: str) -> None:
-    for payload in payloads:
-        response = save_forecast_run(backend_payload(payload), base_url=base_url)
-        point_count = response.get("forecastPoints", response.get("pointCount", len(payload["points"])))
-        metric_count = response.get("metrics", response.get("metricCount", len(payload["metrics"])))
-        print(f"Saved {response['runId']} to backend ({point_count} points, {metric_count} metrics)")
+    return f"{target}-{model}-{timestamp}"
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run simple benchmark forecast backtests.")
+    parser = argparse.ArgumentParser(description="Run simple benchmark energy forecasts.")
     parser.add_argument("--base-url", default=BASE_URL)
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
-    parser.add_argument("--no-save", action="store_true", help="Write reports without posting forecast runs to the backend.")
+    parser.add_argument("--target", choices=("consumption", "generation"), default=TARGET)
+    parser.add_argument("--train-start", help="UTC ISO-8601 timestamp. Defaults to forecast-start minus train-days when forecast-start is set.")
+    parser.add_argument("--train-days", type=int, default=TRAIN_DAYS)
+    parser.add_argument("--forecast-start", help="UTC ISO-8601 timestamp. Defaults to train-start plus train-days.")
+    parser.add_argument("--forecast-weeks", type=int, default=DEFAULT_FORECAST_WEEKS)
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     output_dir = Path(args.output_dir)
-    report_path = output_dir / "forecast-backtest-report.md"
-    forecast_start = TRAIN_START + timedelta(days=TRAIN_DAYS)
-    forecast_end = forecast_start + timedelta(days=FORECAST_DAYS)
+    train_start, forecast_start, forecast_end, horizon = resolve_windows(args)
     data = fetch_forecast_dataframe(
         base_url=args.base_url,
-        target=TARGET,
-        start=format_utc(TRAIN_START),
-        end=format_utc(forecast_end),
+        target=args.target,
+        start=format_utc(train_start),
+        end=format_utc(forecast_start if args.forecast_start else forecast_end),
     )
     if data.empty:
         raise ValueError("Dataset is empty. Check that InfluxDB contains imported energy data for the selected range.")
 
-    actual = data[TARGET].sort_index()
-    train = actual[(actual.index >= TRAIN_START) & (actual.index < forecast_start)].dropna()
+    actual = data[args.target].sort_index()
+    train = actual[(actual.index >= train_start) & (actual.index < forecast_start)].dropna()
     if train.empty:
         raise ValueError("Training dataset is empty for the selected range.")
 
@@ -548,31 +537,35 @@ def main(argv: list[str] | None = None) -> None:
         metrics, comparison = compute_metrics(forecast, actual)
         payloads.append(
             report_payload(
-                build_run_id(model, forecast_start),
+                build_run_id(args.target, model, forecast_start),
                 model,
+                args.target,
                 generated_at,
-                TRAIN_START,
+                train_start,
                 forecast_start,
                 forecast_start,
                 forecast_end,
+                horizon,
                 metrics,
                 comparison,
-                report_path,
             )
         )
 
-    write_reports(output_dir, payloads, actual)
-    print(f"Wrote forecast reports to {output_dir}")
-    if args.no_save:
-        print("Skipped backend save (--no-save)")
-    else:
-        save_payloads(payloads, base_url=args.base_url)
+    dashboard_path = write_reports(output_dir, payloads, actual)
+    if dashboard_path is not None:
+        print(f"Wrote forecast dashboard to {dashboard_path}")
     for payload in payloads:
         metrics = payload["metrics"]
-        print(
-            f"{payload['model']}: MAE={metrics['mae_kwh']:.4f} kWh, "
-            f"RMSE={metrics['rmse_kwh']:.4f} kWh, aligned={metrics['aligned_intervals']}"
-        )
+        if metrics.get("aligned_intervals", 0):
+            print(
+                f"{payload['model']}: MAE={metrics['mae_kwh']:.4f} kWh, "
+                f"RMSE={metrics['rmse_kwh']:.4f} kWh, aligned={metrics['aligned_intervals']}"
+            )
+        else:
+            print(
+                f"{payload['model']}: total forecast={metrics['total_forecast_kwh']:.4f} kWh, "
+                f"aligned=0, missing actual={metrics['missing_actual_intervals']}"
+            )
 
 
 if __name__ == "__main__":

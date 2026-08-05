@@ -1,6 +1,7 @@
 package at.htl.resource;
 
 import at.htl.model.ForecastComparisonPoint;
+import at.htl.model.ForecastRunSummary;
 import at.htl.repository.ForecastRunRepository;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
@@ -35,10 +36,11 @@ class ForecastRunResourceTest {
                           "target": "consumption",
                           "generatedAt": "2026-01-01T00:00:00Z",
                           "forecastStart": "2025-12-01T00:00:00Z",
-                          "forecastEnd": "2025-12-02T00:00:00Z",
+                          "forecastEnd": "2025-12-15T00:00:00Z",
                           "sampleInterval": "PT15M",
+                          "horizon": "P14D",
                           "points": [
-                            {"timestamp": "2025-12-01T00:00:00Z", "forecastKwh": 12.5, "actualKwh": 12.0}
+                            {"timestamp": "2025-12-01T00:00:00Z", "forecastKwh": 12.5}
                           ],
                           "metrics": [
                             {"name": "mae_kwh", "value": 0.5}
@@ -81,5 +83,36 @@ class ForecastRunResourceTest {
                 .body("points[0].forecastKwh", equalTo(12.5F))
                 .body("points[0].actualKwh", equalTo(12.0F))
                 .body("points[0].errorKwh", equalTo(0.5F));
+    }
+
+    @Test
+    void listsForecastRuns() throws Exception {
+        when(forecastRunRepository.findRuns("generation", 25)).thenReturn(List.of(
+                new ForecastRunSummary(
+                        "run-1",
+                        "openstef-barebones",
+                        "generation",
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        Instant.parse("2025-11-01T00:00:00Z"),
+                        Instant.parse("2025-12-01T00:00:00Z"),
+                        Instant.parse("2025-12-01T00:00:00Z"),
+                        Instant.parse("2025-12-02T00:00:00Z"),
+                        "PT15M",
+                        "PT36H",
+                        "openstef-xgboost",
+                        "app/reports/forecast-runs/openstef-barebones-report.md"
+                )
+        ));
+
+        given()
+                .queryParam("target", "generation")
+                .queryParam("limit", 25)
+                .when().get("/api/forecast-runs")
+                .then()
+                .statusCode(200)
+                .body("[0].runId", equalTo("run-1"))
+                .body("[0].model", equalTo("openstef-barebones"))
+                .body("[0].target", equalTo("generation"))
+                .body("[0].forecastStart", equalTo("2025-12-01T00:00:00Z"));
     }
 }

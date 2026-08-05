@@ -8,28 +8,34 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from barebones_openstef import (
+from custom_openstef import (
+    EXTENSION_POINT,
+    MODEL_FAMILY,
     MODEL_NAME,
     api_payload,
     build_parser,
+    parse_base_models,
     parse_utc,
-    persist_workflow,
     run_id,
     save_payload,
     write_comparison_plot,
+    write_run_files,
 )
 
 
-class BarebonesOpenStefTest(unittest.TestCase):
+class CustomOpenStefTest(unittest.TestCase):
     def test_parse_utc_accepts_z_suffix(self):
         self.assertEqual(
             datetime(2025, 6, 11, tzinfo=timezone.utc),
             parse_utc("2025-06-11T00:00:00Z"),
         )
 
+    def test_parse_base_models_strips_empty_values(self):
+        self.assertEqual(["lgbm", "gblinear"], parse_base_models("lgbm, gblinear, "))
+
     def test_run_id_contains_target_model_and_forecast_start(self):
         self.assertEqual(
-            "generation-openstef-barebones-20250909T000000Z",
+            "generation-openstef-custom-ensemble-20250909T000000Z",
             run_id("generation", datetime(2025, 9, 9, tzinfo=timezone.utc)),
         )
 
@@ -50,8 +56,7 @@ class BarebonesOpenStefTest(unittest.TestCase):
         )
 
         self.assertEqual(MODEL_NAME, payload["model"])
-        self.assertEqual("openstef-xgboost", payload["modelFamily"])
-        self.assertEqual("PT36H", payload["horizon"])
+        self.assertEqual(MODEL_FAMILY, payload["modelFamily"])
         self.assertEqual([{"name": "mae_kwh", "value": 0.25}], payload["metrics"])
         self.assertEqual(1.25, payload["points"][0]["forecastKwh"])
         self.assertEqual(1.0, payload["points"][0]["actualKwh"])
@@ -61,7 +66,7 @@ class BarebonesOpenStefTest(unittest.TestCase):
         payload = {"runId": "run-1", "points": [object()], "metrics": [object()]}
 
         with patch(
-            "barebones_openstef.save_forecast_run",
+            "custom_openstef.save_forecast_run",
             return_value={"runId": "run-1", "forecastPoints": 1, "metrics": 1},
         ):
             output = StringIO()
@@ -69,6 +74,45 @@ class BarebonesOpenStefTest(unittest.TestCase):
                 save_payload(payload, base_url="http://localhost:8080")
 
         self.assertIn("Saved run-1 to backend (1 points, 1 metrics)", output.getvalue())
+
+    def test_write_run_files_saves_custom_comparison_plot(self):
+        payload = {
+            "runId": "generation-openstef-custom-ensemble-20250909T000000Z",
+            "model": MODEL_NAME,
+            "metrics": [{"name": "mae_kwh", "value": 0.25}],
+            "points": [
+                {
+                    "timestamp": "2025-09-09T00:00:00Z",
+                    "forecastKwh": 1.25,
+                    "actualKwh": 1.0,
+                }
+            ],
+        }
+        metadata = {
+            "target": "generation",
+            "extensionPoint": EXTENSION_POINT,
+            "baseModels": ["lgbm", "gblinear"],
+            "combinerModel": "lgbm",
+            "ensembleType": "learned_weights",
+            "trainStart": "2025-06-11T00:00:00Z",
+            "trainEnd": "2025-09-09T00:00:00Z",
+            "forecastStart": "2025-09-09T00:00:00Z",
+            "forecastEnd": "2025-09-16T00:00:00Z",
+            "weatherAlignment": {"alignedWeatherIntervalCount": 1, "missingWeatherIntervalCount": 0},
+            "validationMetrics": {"ensemble_r2": 0.5},
+        }
+
+        with TemporaryDirectory() as directory:
+            plot_path = write_run_files(Path(directory), payload, metadata)
+            plot = Path(directory) / "openstef-custom-ensemble-comparison.html"
+            plot_exists = plot.exists()
+            json_exists = (Path(directory) / "generation-openstef-custom-ensemble-20250909T000000Z.json").exists()
+            markdown_exists = (Path(directory) / "openstef-custom-ensemble-report.md").exists()
+
+        self.assertEqual("openstef-custom-ensemble-comparison.html", plot_path.name)
+        self.assertTrue(plot_exists)
+        self.assertFalse(json_exists)
+        self.assertFalse(markdown_exists)
 
     def test_write_comparison_plot_saves_forecast_vs_actual_html(self):
         payload = {
@@ -87,52 +131,18 @@ class BarebonesOpenStefTest(unittest.TestCase):
             path = write_comparison_plot(Path(directory), payload, metadata)
             html = path.read_text(encoding="utf-8")
 
-        self.assertEqual("openstef-barebones-comparison.html", path.name)
-        self.assertIn("Barebones Forecast vs Actual", html)
+        self.assertEqual("openstef-custom-ensemble-comparison.html", path.name)
+        self.assertIn("Custom OpenSTEF", html)
         self.assertIn("Time (UTC)", html)
         self.assertIn("Generation energy (kWh per 15-minute interval)", html)
         self.assertIn(MODEL_NAME, html)
 
-    def test_parser_is_barebones_only(self):
+    def test_parser_defaults_to_custom_ensemble(self):
         args = build_parser().parse_args([])
 
         self.assertEqual("generation", args.target)
-        self.assertFalse(args.persist_model)
-        self.assertFalse(hasattr(args, "models"))
-        self.assertFalse(hasattr(args, "n_trials"))
-
-    def test_parser_can_enable_model_persistence(self):
-        args = build_parser().parse_args(["--persist-model", "--model-root", "/tmp/models"])
-
-        self.assertTrue(args.persist_model)
-        self.assertEqual("/tmp/models", args.model_root)
-
-    def test_persist_workflow_writes_barebones_artifact(self):
-        class Config:
-            class Hyperparameters:
-                def model_dump(self, *, mode):
-                    return {"mode": mode}
-
-            xgboost_hyperparams = Hyperparameters()
-
-        with TemporaryDirectory() as directory:
-            artifact_dir = persist_workflow(
-                workflow={"workflow": "stub"},
-                config=Config(),
-                model_root=directory,
-                target="generation",
-                train_start=datetime(2025, 6, 11, tzinfo=timezone.utc),
-                train_end=datetime(2025, 9, 9, tzinfo=timezone.utc),
-                created_at=datetime(2026, 8, 5, 12, tzinfo=timezone.utc),
-                weather_path="weather.xlsx",
-            )
-
-            metadata = (artifact_dir / "metadata.json").read_text(encoding="utf-8")
-            schema = (artifact_dir / "feature-schema.json").read_text(encoding="utf-8")
-
-        self.assertEqual("generation-openstef-barebones-20260805T120000Z", artifact_dir.name)
-        self.assertIn('"model": "openstef-barebones"', metadata)
-        self.assertIn('"targetColumn": "generation"', schema)
+        self.assertEqual("lgbm,gblinear", args.base_models)
+        self.assertEqual("lgbm", args.combiner_model)
 
 
 if __name__ == "__main__":

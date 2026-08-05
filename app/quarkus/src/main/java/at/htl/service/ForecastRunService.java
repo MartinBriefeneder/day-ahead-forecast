@@ -6,6 +6,7 @@ import at.htl.model.ForecastMetric;
 import at.htl.model.ForecastPoint;
 import at.htl.model.ForecastRunRequest;
 import at.htl.model.ForecastRunSaveResponse;
+import at.htl.model.ForecastRunSummary;
 import at.htl.repository.ForecastRunRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -33,6 +34,16 @@ public class ForecastRunService {
             throw new IllegalArgumentException("runId must be provided");
         }
         return new ForecastComparisonResponse(runId, forecastRunRepository.findComparison(runId, limit));
+    }
+
+    public List<ForecastRunSummary> listRuns(String target, int limit) throws Exception {
+        if (target != null && !target.isBlank()) {
+            ForecastDatasetTarget.parse(target);
+        }
+        if (limit <= 0 || limit > 1000) {
+            throw new IllegalArgumentException("limit must be between 1 and 1000");
+        }
+        return forecastRunRepository.findRuns(target, limit);
     }
 
     private void validate(ForecastRunRequest request) {

@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
-from main import backend_payload, build_parser, write_reports
+from main import build_parser, resolve_windows, write_reports
 
 
 class MainBacktestReportTest(unittest.TestCase):
@@ -21,6 +21,7 @@ class MainBacktestReportTest(unittest.TestCase):
                 "forecastStart": "2025-09-09T00:00:00Z",
                 "forecastEnd": "2025-09-09T01:00:00Z",
                 "sampleInterval": "PT15M",
+                "horizon": "P7D",
                 "metrics": {
                     "aligned_intervals": 4,
                     "mae_kwh": 0.1,
@@ -43,53 +44,36 @@ class MainBacktestReportTest(unittest.TestCase):
 
         with TemporaryDirectory() as directory:
             output_dir = Path(directory)
-            write_reports(output_dir, payloads, actual)
+            dashboard_path = write_reports(output_dir, payloads, actual)
             dashboard = (output_dir / "forecast-backtest-dashboard.html").read_text(encoding="utf-8")
-            markdown = (output_dir / "forecast-backtest-report.md").read_text(encoding="utf-8")
 
-        self.assertIn("Consumption Backtest Dashboard", dashboard)
+        self.assertEqual("forecast-backtest-dashboard.html", dashboard_path.name)
+        self.assertIn("Consumption Forecast Dashboard", dashboard)
+        self.assertIn("Expected Energy Totals", dashboard)
         self.assertIn("Actuals and forecasts", dashboard)
         self.assertIn("Interval error", dashboard)
         self.assertIn("historical-average", dashboard)
-        self.assertIn("forecast-backtest-dashboard.html", markdown)
 
-    def test_backend_payload_uses_backend_metric_list_shape(self):
-        payload = {
-            "runId": "run-1",
-            "model": "historical-average",
-            "target": "consumption",
-            "modelFamily": "simple-benchmark",
-            "generatedAt": "2026-01-01T00:00:00Z",
-            "trainStart": "2025-11-01T00:00:00Z",
-            "trainEnd": "2025-12-01T00:00:00Z",
-            "forecastStart": "2025-12-01T00:00:00Z",
-            "forecastEnd": "2025-12-02T00:00:00Z",
-            "sampleInterval": "PT15M",
-            "reportPath": "app/reports/forecast-runs/forecast-backtest-report.md",
-            "points": [
-                {
-                    "timestamp": "2025-12-01T00:00:00Z",
-                    "forecastKwh": 12.5,
-                    "actualKwh": 12.0,
-                    "errorKwh": 0.5,
-                }
-            ],
-            "metrics": {"mae_kwh": 0.5, "ignored": None},
-        }
+    def test_parser_does_not_accept_no_save(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["--no-save"])
 
-        result = backend_payload(payload)
+    def test_forecast_start_defaults_training_window_to_previous_train_days(self):
+        args = build_parser().parse_args([
+            "--forecast-start",
+            "2026-08-05T00:00:00Z",
+            "--train-days",
+            "90",
+            "--forecast-weeks",
+            "1",
+        ])
 
-        self.assertEqual("simple-benchmark", result["modelFamily"])
-        self.assertEqual("2025-11-01T00:00:00Z", result["trainStart"])
-        self.assertEqual("app/reports/forecast-runs/forecast-backtest-report.md", result["reportPath"])
-        self.assertEqual([{"name": "mae_kwh", "value": 0.5}], result["metrics"])
-        self.assertNotIn("errorKwh", result["points"][0])
+        train_start, forecast_start, forecast_end, horizon = resolve_windows(args)
 
-    def test_parser_supports_no_save(self):
-        args = build_parser().parse_args(["--no-save"])
-
-        self.assertTrue(args.no_save)
-
+        self.assertEqual("2026-05-07T00:00:00+00:00", train_start.isoformat())
+        self.assertEqual("2026-08-05T00:00:00+00:00", forecast_start.isoformat())
+        self.assertEqual("2026-08-12T00:00:00+00:00", forecast_end.isoformat())
+        self.assertEqual(7, horizon.days)
 
 if __name__ == "__main__":
     unittest.main()

@@ -31,7 +31,13 @@ public class EnergyImportService {
         logDiagnostics(result.diagnostics());
 
         if (result.hasErrors()) {
-            throw new IllegalArgumentException("CSV validation failed with " + result.diagnostics().stream().filter(CsvValidationDiagnostic::isError).count() + " error(s)");
+            long errorCount = result.diagnostics().stream().filter(CsvValidationDiagnostic::isError).count();
+            CsvValidationDiagnostic firstError = result.diagnostics().stream()
+                    .filter(CsvValidationDiagnostic::isError)
+                    .findFirst()
+                    .orElseThrow();
+            throw new IllegalArgumentException("CSV validation failed with " + errorCount
+                    + " error(s); first error: " + formatDiagnostic(firstError));
         }
 
         List<EnergySeries> series = result.series();

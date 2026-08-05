@@ -94,5 +94,9 @@ def save_forecast_run(
         json=payload,
         timeout=timeout_seconds,
     )
-    response.raise_for_status()
+    if not response.ok:
+        raise requests.HTTPError(
+            f"{response.status_code} Error saving forecast run: {response.text}",
+            response=response,
+        )
     return response.json()

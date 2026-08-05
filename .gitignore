@@ -15,3 +15,5 @@ app/quarkus/target/
 app/.env
 app/influxdb/admin-token.json
 app/influxdb-explorer/
+app/models/forecast-models/**
+app/python/tests/__pycache__/

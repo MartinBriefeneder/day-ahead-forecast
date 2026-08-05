@@ -7,7 +7,7 @@ from weather_features import (
     WeatherFeatureDataset,
     add_weather_features,
     align_weather_features,
-    fetch_open_meteo_forecast,
+    fetch_gridoo_forecast,
     inspect_weather_frame,
     normalize_weather_features,
 )
@@ -104,14 +104,29 @@ class WeatherFeaturesTest(unittest.TestCase):
         self.assertEqual(1, diagnostics["alignment"]["alignedWeatherIntervalCount"])
         self.assertIn("weather_diagnostics", result.attrs)
 
-    def test_fetch_open_meteo_forecast_maps_minutely_15_response(self):
-        payload = {
-            "minutely_15": {
-                "time": ["2026-08-06T00:00", "2026-08-06T00:15"],
-                "temperature_2m": [17.0, 17.5],
-                "shortwave_radiation": [0.0, 5.0],
-            }
-        }
+    def test_fetch_gridoo_forecast_maps_response_fields(self):
+        payload = [
+            {
+                "timestamp": 1785974400,
+                "timestamp_iso": "2026-08-06T00:00:00Z",
+                "ghi": 0.0,
+                "dni": 0.0,
+                "dhi": 0.0,
+                "temperature": 17.0,
+                "windspeed": 1.5,
+                "winddirection": 42.0,
+            },
+            {
+                "timestamp": 1785975300,
+                "timestamp_iso": "2026-08-06T00:15:00Z",
+                "ghi": 5.0,
+                "dni": 10.0,
+                "dhi": 2.0,
+                "temperature": 17.5,
+                "windspeed": 1.6,
+                "winddirection": 43.0,
+            },
+        ]
 
         class Response:
             def raise_for_status(self):
@@ -121,18 +136,37 @@ class WeatherFeaturesTest(unittest.TestCase):
                 return payload
 
         with patch("weather_features.requests.get", return_value=Response()) as get:
-            dataset = fetch_open_meteo_forecast(
-                latitude=47.9,
-                longitude=14.1,
+            dataset = fetch_gridoo_forecast(
                 start=pd.Timestamp("2026-08-06T00:00:00Z").to_pydatetime(),
                 end=pd.Timestamp("2026-08-06T00:30:00Z").to_pydatetime(),
-                requested_features=["temperature_2m", "shortwave_radiation"],
+                requested_features=[
+                    "temperature_2m",
+                    "shortwave_radiation",
+                    "direct_normal_irradiance",
+                    "diffuse_horizontal_irradiance",
+                    "wind_speed_10m",
+                    "wind_direction_10m",
+                ],
             )
 
-        self.assertEqual(["temperature_2m", "shortwave_radiation"], list(dataset.data.columns))
+        self.assertEqual(
+            [
+                "temperature_2m",
+                "shortwave_radiation",
+                "direct_normal_irradiance",
+                "diffuse_horizontal_irradiance",
+                "wind_speed_10m",
+                "wind_direction_10m",
+            ],
+            list(dataset.data.columns),
+        )
         self.assertEqual(pd.Timestamp("2026-08-06T00:00:00Z"), dataset.data.index[0])
+        self.assertEqual(5.0, dataset.data.loc[pd.Timestamp("2026-08-06T00:15:00Z"), "shortwave_radiation"])
+        self.assertEqual(10.0, dataset.data.loc[pd.Timestamp("2026-08-06T00:15:00Z"), "direct_normal_irradiance"])
         self.assertEqual(2, dataset.metadata["intervalCount"])
-        self.assertEqual("UTC", get.call_args.kwargs["params"]["timezone"])
+        self.assertEqual(1785974400, get.call_args.kwargs["params"]["start"])
+        self.assertEqual(1785976200, get.call_args.kwargs["params"]["end"])
+        self.assertIn("/weather/4", get.call_args.args[0])
 
 
 if __name__ == "__main__":

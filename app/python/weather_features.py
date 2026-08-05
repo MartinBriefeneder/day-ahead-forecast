@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -36,7 +36,7 @@ WEATHER_FEATURES: dict[str, WeatherFeature] = {
         name="shortwave_radiation",
         source_column="all_sky_global_horizontal_irradiance",
         unit="W/m2",
-        description="All-sky global horizontal irradiance from the historical weather file.",
+        description="All-sky global horizontal irradiance from the historical weather file; equivalent to forecast ghi.",
     ),
     "temperature_2m": WeatherFeature(
         name="temperature_2m",
@@ -64,14 +64,17 @@ WEATHER_FEATURES: dict[str, WeatherFeature] = {
     ),
 }
 DEFAULT_WEATHER_FEATURES = tuple(WEATHER_FEATURES)
-OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-OPEN_METEO_VARIABLES = {
-    "temperature_2m": "temperature_2m",
-    "relative_humidity_2m": "relative_humidity_2m",
-    "wind_speed_10m": "wind_speed_10m",
-    "shortwave_radiation": "shortwave_radiation",
-    "surface_pressure": "surface_pressure",
+GRIDOO_FORECAST_URL = "https://datahub.gridoo.com/v1/weather/{location_id}"
+DEFAULT_GRIDOO_LOCATION_ID = 4
+GRIDOO_VARIABLES = {
+    "shortwave_radiation": ("ghi", "W/m2"),
+    "direct_normal_irradiance": ("dni", "W/m2"),
+    "diffuse_horizontal_irradiance": ("dhi", "W/m2"),
+    "temperature_2m": ("temperature", "degC"),
+    "wind_speed_10m": ("windspeed", "m/s"),
+    "wind_direction_10m": ("winddirection", "deg"),
 }
+DEFAULT_GRIDOO_WEATHER_FEATURES = tuple(GRIDOO_VARIABLES)
 
 
 def load_weather_features(
@@ -189,7 +192,7 @@ def inspect_weather_frame(
         "unresolvedQuestions": [
             "The workbook does not contain explicit provider metadata.",
             "The workbook does not contain explicit timezone metadata; Europe/Vienna is used for local alignment.",
-            "The operational forecast provider and schema remain out of scope for this local-only step.",
+            "The workbook does not contain dni, dhi, or wind direction fields from the Gridoo forecast interface.",
         ],
     }
 
@@ -277,62 +280,88 @@ def add_weather_features(
     return result, diagnostics
 
 
-def fetch_open_meteo_forecast(
+def fetch_gridoo_forecast(
     *,
-    latitude: float,
-    longitude: float,
     start: datetime,
     end: datetime,
+    location_id: int = DEFAULT_GRIDOO_LOCATION_ID,
     requested_features: Iterable[str] | None = None,
     timeout_seconds: int = 30,
-    url: str = OPEN_METEO_FORECAST_URL,
+    url: str = GRIDOO_FORECAST_URL,
 ) -> WeatherFeatureDataset:
-    feature_names = _requested_feature_names(requested_features)
-    variables = [OPEN_METEO_VARIABLES[feature] for feature in feature_names]
+    feature_names = _requested_gridoo_feature_names(requested_features)
+    forecast_start = _utc_timestamp(start)
+    forecast_end = _utc_timestamp(end)
     params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "timezone": "UTC",
-        "start_date": start.date().isoformat(),
-        "end_date": (end - timedelta(seconds=1)).date().isoformat(),
-        "minutely_15": ",".join(variables),
+        "start": int(forecast_start.timestamp()),
+        "end": int(forecast_end.timestamp()),
     }
+    request_url = url.format(location_id=location_id)
 
-    response = requests.get(url, params=params, timeout=timeout_seconds)
+    response = requests.get(request_url, params=params, timeout=timeout_seconds)
     response.raise_for_status()
     payload = response.json()
-    data = _open_meteo_frame(payload, feature_names)
-    data = data[(data.index >= pd.Timestamp(start)) & (data.index < pd.Timestamp(end))]
+    data = _gridoo_frame(payload, feature_names)
+    data = data[(data.index >= forecast_start) & (data.index < forecast_end)]
     metadata = {
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "source": "Open-Meteo Forecast API",
-        "sourceUrl": url,
-        "latitude": latitude,
-        "longitude": longitude,
-        "utcStart": start.isoformat().replace("+00:00", "Z"),
-        "utcEnd": end.isoformat().replace("+00:00", "Z"),
+        "source": "Gridoo Weather API",
+        "sourceUrl": request_url,
+        "locationId": location_id,
+        "utcStart": forecast_start.isoformat().replace("+00:00", "Z"),
+        "utcEnd": forecast_end.isoformat().replace("+00:00", "Z"),
         "featureNames": list(feature_names),
         "intervalCount": int(len(data)),
     }
     return WeatherFeatureDataset(data=data, metadata=metadata)
 
 
-def _open_meteo_frame(payload: dict, feature_names: Iterable[str]) -> pd.DataFrame:
-    source = payload.get("minutely_15")
-    if not source:
-        raise ValueError("Open-Meteo response does not contain minutely_15 forecast data")
-    if "time" not in source:
-        raise ValueError("Open-Meteo minutely_15 response does not contain time values")
+def _gridoo_frame(payload: list[dict] | dict, feature_names: Iterable[str]) -> pd.DataFrame:
+    rows = payload
+    if isinstance(payload, dict):
+        rows = payload.get("data", payload.get("weather", []))
+    if not isinstance(rows, list):
+        raise ValueError("Gridoo response must be a JSON array or contain a weather data array")
+    if not rows:
+        return pd.DataFrame(columns=list(feature_names), index=pd.DatetimeIndex([], name="timestamp"))
 
-    data = pd.DataFrame({"timestamp": pd.to_datetime(source["time"], utc=True, errors="coerce")})
+    data = pd.DataFrame(rows)
+    if "timestamp_iso" in data.columns:
+        data["timestamp"] = pd.to_datetime(data["timestamp_iso"], utc=True, errors="coerce")
+    elif "timestamp" in data.columns:
+        data["timestamp"] = pd.to_datetime(data["timestamp"], unit="s", utc=True, errors="coerce")
+    else:
+        raise ValueError("Gridoo response does not contain timestamp or timestamp_iso values")
     for feature in feature_names:
-        source_name = OPEN_METEO_VARIABLES[feature]
-        if source_name not in source:
-            raise ValueError(f"Open-Meteo response is missing variable: {source_name}")
-        data[feature] = pd.to_numeric(pd.Series(source[source_name]), errors="coerce")
+        source_name = GRIDOO_VARIABLES[feature][0]
+        if source_name not in data.columns:
+            raise ValueError(f"Gridoo response is missing variable: {source_name}")
+        data[feature] = pd.to_numeric(data[source_name], errors="coerce")
 
     data = data.dropna(subset=["timestamp"]).set_index("timestamp").sort_index()
     return data[list(feature_names)]
+
+
+def _requested_gridoo_feature_names(requested_features: Iterable[str] | None) -> tuple[str, ...]:
+    if requested_features is None:
+        return DEFAULT_GRIDOO_WEATHER_FEATURES
+    feature_names = tuple(requested_features)
+    unsupported = [feature for feature in feature_names if feature not in GRIDOO_VARIABLES]
+    if unsupported:
+        raise ValueError(
+            "Unsupported Gridoo weather feature(s): "
+            + ", ".join(unsupported)
+            + ". Supported features: "
+            + ", ".join(GRIDOO_VARIABLES)
+        )
+    return feature_names
+
+
+def _utc_timestamp(value: datetime) -> pd.Timestamp:
+    timestamp = pd.Timestamp(value)
+    if timestamp.tzinfo is None:
+        return timestamp.tz_localize("UTC")
+    return timestamp.tz_convert("UTC")
 
 
 def weather_inspection_markdown(metadata: dict) -> str:

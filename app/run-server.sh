@@ -5,14 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
 INFLUX_DATABASE="energy"
-
-if [ -f ./.env ]; then
-  set -a
-  . ./.env
-  set +a
-fi
-
-: "${INFLUXDB_TOKEN:?set INFLUXDB_TOKEN or create app/.env before running this script}"
+export INFLUXDB_TOKEN=apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg
 
 mkdir -p ./influxdb-explorer/config
 cat > ./influxdb-explorer/config/config.json <<EOF

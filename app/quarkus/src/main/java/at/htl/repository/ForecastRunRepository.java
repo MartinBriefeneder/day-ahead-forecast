@@ -4,6 +4,7 @@ import at.htl.model.ForecastComparisonPoint;
 import at.htl.model.ForecastMetric;
 import at.htl.model.ForecastPoint;
 import at.htl.model.ForecastRunRequest;
+import at.htl.model.ForecastRunSummary;
 import com.influxdb.v3.client.InfluxDBClient;
 import com.influxdb.v3.client.Point;
 import com.influxdb.v3.client.write.WriteOptions;
@@ -69,6 +70,20 @@ public class ForecastRunRepository {
         }
     }
 
+    public List<ForecastRunSummary> findRuns(String target, int limit) throws Exception {
+        String sql = buildRunsSql(target, limit);
+        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database)) {
+            try (Stream<Object[]> stream = client.query(sql)) {
+                return stream.map(this::toRunSummary).toList();
+            } catch (RuntimeException exception) {
+                if (isMissingTableException(exception, metadataMeasurement)) {
+                    return List.of();
+                }
+                throw exception;
+            }
+        }
+    }
+
     String buildComparisonSql(String runId, int limit) {
         if (runId == null || runId.isBlank()) {
             throw new IllegalArgumentException("runId must be provided");
@@ -92,6 +107,43 @@ public class ForecastRunRepository {
                 numberOrNull(row[2]),
                 numberOrNull(row[3])
         );
+    }
+
+    String buildRunsSql(String target, int limit) {
+        if (limit <= 0 || limit > 1000) {
+            throw new IllegalArgumentException("limit must be between 1 and 1000");
+        }
+
+        StringBuilder sql = new StringBuilder()
+                .append("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, ")
+                .append("sample_interval, horizon, model_family, report_path FROM ")
+                .append(quoteIdentifier(metadataMeasurement));
+        if (target != null && !target.isBlank()) {
+            sql.append(" WHERE target = '").append(escapeSqlLiteral(target)).append("'");
+        }
+        return sql.append(" ORDER BY time DESC LIMIT ").append(limit).toString();
+    }
+
+    ForecastRunSummary toRunSummary(Object[] row) {
+        return new ForecastRunSummary(
+                String.valueOf(row[0]),
+                String.valueOf(row[1]),
+                String.valueOf(row[2]),
+                parseNullableInstant(row[3]),
+                parseNullableInstant(row[4]),
+                parseNullableInstant(row[5]),
+                parseNullableInstant(row[6]),
+                parseNullableInstant(row[7]),
+                stringOrNull(row[8]),
+                stringOrNull(row[9]),
+                stringOrNull(row[10]),
+                stringOrNull(row[11])
+        );
+    }
+
+    boolean isMissingTableException(RuntimeException exception, String table) {
+        String message = exception.getMessage();
+        return message != null && message.contains("table 'public.iox." + table + "' not found");
     }
 
     WriteOptions writeOptions() {
@@ -171,6 +223,14 @@ public class ForecastRunRepository {
             return null;
         }
         return ((Number) value).doubleValue();
+    }
+
+    private String stringOrNull(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Instant parseNullableInstant(Object value) {
+        return value == null ? null : Instant.parse(String.valueOf(value));
     }
 
     private Instant parseTime(Object value) {

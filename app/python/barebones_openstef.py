@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -9,45 +8,34 @@ from typing import Any
 import pandas as pd
 
 from forecast_dataset_api import fetch_forecast_dataset, save_forecast_run
+from forecast_runner import (
+    BASE_URL,
+    DEFAULT_FORECAST_DAYS,
+    DEFAULT_TARGET,
+    DEFAULT_TRAIN_DAYS,
+    DEFAULT_TRAIN_START,
+    HORIZON,
+    OUTPUT_DIR,
+    SAMPLE_INTERVAL,
+    WEATHER_FEATURES,
+    format_utc,
+    metric_items,
+    none_if_nan,
+    parse_utc,
+    prediction_context_start,
+    require_positive_int,
+    run_id_for_model,
+)
 from main import compute_metrics
+from persisted_model import DEFAULT_MODEL_ROOT, artifact_directory, openstef_feature_schema, openstef_metadata, write_artifact
 from weather_features import DEFAULT_WEATHER_PATH
 
-BASE_URL = "http://localhost:8080"
-DEFAULT_TARGET = "generation"
-DEFAULT_TRAIN_START = "2025-06-11T00:00:00Z"
-DEFAULT_TRAIN_DAYS = 90
-DEFAULT_FORECAST_DAYS = 7
-OUTPUT_DIR = (Path(__file__).resolve().parent / "../reports/forecast-runs").resolve()
-
 MODEL_NAME = "openstef-barebones"
-SAMPLE_INTERVAL = "PT15M"
-HORIZON = "PT36H"
-WEATHER_FEATURES = (
-    "temperature_2m",
-    "relative_humidity_2m",
-    "wind_speed_10m",
-    "shortwave_radiation",
-    "surface_pressure",
-)
-
-
-def parse_utc(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
-
-
-def format_utc(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+MODEL_FAMILY = "openstef-xgboost"
 
 
 def run_id(target: str, forecast_start: datetime) -> str:
-    timestamp = forecast_start.strftime("%Y%m%dT%H%M%SZ")
-    return f"{target}-{MODEL_NAME}-{timestamp}"
-
-
-def none_if_nan(value: object) -> float | None:
-    if pd.isna(value):
-        return None
-    return float(value)
+    return run_id_for_model(target, MODEL_NAME, forecast_start)
 
 
 def create_barebones_workflow(target: str):
@@ -89,7 +77,7 @@ def api_payload(
         "runId": run_id(target, forecast_start),
         "model": MODEL_NAME,
         "target": target,
-        "modelFamily": "openstef-xgboost",
+        "modelFamily": MODEL_FAMILY,
         "generatedAt": format_utc(generated_at),
         "trainStart": format_utc(train_start) if train_start is not None else None,
         "trainEnd": format_utc(train_end) if train_end is not None else None,
@@ -106,11 +94,7 @@ def api_payload(
             }
             for index, row in comparison.iterrows()
         ],
-        "metrics": [
-            {"name": name, "value": float(value)}
-            for name, value in metrics.items()
-            if isinstance(value, int | float) and pd.notna(value)
-        ],
+        "metrics": metric_items(metrics),
     }
 
 
@@ -146,17 +130,9 @@ def forecast_payload(
 
 def write_run_files(output_dir: Path, payload: dict[str, Any], metadata: dict[str, Any]) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / f"{payload['runId']}.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
     plot_path = write_comparison_plot(output_dir, payload, metadata)
     metadata["comparisonPlot"] = plot_path.name
-
-    metadata_path = output_dir / "openstef-barebones-metadata.json"
-    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-
-    report_path = output_dir / "openstef-barebones-report.md"
-    report_path.write_text(markdown_report(payload, metadata), encoding="utf-8")
-    return report_path
+    return plot_path
 
 
 def write_comparison_plot(output_dir: Path, payload: dict[str, Any], metadata: dict[str, Any]) -> Path:
@@ -199,48 +175,6 @@ def write_comparison_plot(output_dir: Path, payload: dict[str, Any], metadata: d
     return plot_path
 
 
-def markdown_report(payload: dict[str, Any], metadata: dict[str, Any]) -> str:
-    metrics = {item["name"]: item["value"] for item in payload["metrics"]}
-    lines = [
-        "# OpenSTEF Barebones Report",
-        "",
-        f"- Target: `{metadata['target']}`",
-        f"- Model: `{MODEL_NAME}`",
-        f"- Training window: `{metadata['trainStart']}` to `{metadata['trainEnd']}`",
-        f"- Forecast window: `{metadata['forecastStart']}` to `{metadata['forecastEnd']}`",
-        f"- Horizon: `{HORIZON}`",
-        f"- Weather rows aligned: `{metadata['weatherAlignment'].get('alignedWeatherIntervalCount')}`",
-        f"- Weather rows missing: `{metadata['weatherAlignment'].get('missingWeatherIntervalCount')}`",
-        "",
-        "## Metrics",
-        "",
-        "| Model | Aligned intervals | MAE kWh | RMSE kWh | Bias kWh | Total error kWh | MAPE % | sMAPE % |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
-        "| "
-        + " | ".join(
-            [
-                MODEL_NAME,
-                str(int(metrics.get("aligned_intervals", 0))),
-                format_metric(metrics.get("mae_kwh")),
-                format_metric(metrics.get("rmse_kwh")),
-                format_metric(metrics.get("bias_kwh")),
-                format_metric(metrics.get("total_energy_error_kwh")),
-                format_metric(metrics.get("mape_percent")),
-                format_metric(metrics.get("smape_percent")),
-            ]
-        )
-        + " |",
-        "",
-        "## Run Files",
-        "",
-        f"- `{payload['runId']}.json`",
-        "- `openstef-barebones-metadata.json`",
-        f"- `{metadata['comparisonPlot']}`",
-        "",
-    ]
-    return "\n".join(lines)
-
-
 def format_metric(value: object) -> str:
     if value is None:
         return ""
@@ -254,6 +188,36 @@ def save_payload(payload: dict[str, Any], *, base_url: str) -> None:
     print(f"Saved {response['runId']} to backend ({point_count} points, {metric_count} metrics)")
 
 
+def persist_workflow(
+    *,
+    workflow,
+    config,
+    model_root: str | Path,
+    target: str,
+    train_start: datetime,
+    train_end: datetime,
+    created_at: datetime,
+    weather_path: str,
+) -> Path:
+    artifact_dir = artifact_directory(model_root, target=target, model=MODEL_NAME, created_at=created_at)
+    schema = openstef_feature_schema(target=target, weather_features=WEATHER_FEATURES, sample_interval=SAMPLE_INTERVAL)
+    metadata = openstef_metadata(
+        target=target,
+        model=MODEL_NAME,
+        model_family=MODEL_FAMILY,
+        train_start=train_start,
+        train_end=train_end,
+        created_at=created_at,
+        weather_path=weather_path,
+        artifact_dir=artifact_dir,
+        sample_interval=SAMPLE_INTERVAL,
+        horizon=HORIZON,
+        xgboost_hyperparameters=config.xgboost_hyperparams.model_dump(mode="json"),
+    )
+    write_artifact(artifact_dir, model=workflow, metadata=metadata, feature_schema=schema)
+    return artifact_dir
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a barebones OpenSTEF XGBoost forecast.")
     parser.add_argument("--base-url", default=BASE_URL)
@@ -263,12 +227,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--forecast-days", type=int, default=DEFAULT_FORECAST_DAYS)
     parser.add_argument("--weather-path", default=str(DEFAULT_WEATHER_PATH))
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
-    parser.add_argument("--no-save", action="store_true", help="Write reports without posting the forecast run to the backend.")
+    parser.add_argument("--persist-model", action="store_true", help="Write the trained model as a local artifact.")
+    parser.add_argument("--model-root", default=str(DEFAULT_MODEL_ROOT))
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    require_positive_int("train-days", args.train_days)
+    require_positive_int("forecast-days", args.forecast_days)
     train_start = parse_utc(args.train_start)
     train_end = train_start + timedelta(days=args.train_days)
     forecast_start = train_end
@@ -289,7 +256,7 @@ def main(argv: list[str] | None = None) -> None:
         raise ValueError("Dataset is empty. Check that imported energy data and weather data are available.")
 
     train_dataset = dataset.filter_by_range(start=train_start, end=train_end)
-    predict_dataset = dataset.filter_by_range(start=train_end - timedelta(days=14), end=forecast_end)
+    predict_dataset = dataset.filter_by_range(start=prediction_context_start(train_end), end=forecast_end)
     train_dataset.data.attrs["target"] = args.target
 
     print(f"Training rows: {len(train_dataset.data):,}")
@@ -315,7 +282,7 @@ def main(argv: list[str] | None = None) -> None:
         "generatedAt": format_utc(generated_at),
         "target": args.target,
         "model": MODEL_NAME,
-        "modelFamily": "xgboost",
+        "modelFamily": MODEL_FAMILY,
         "trainStart": format_utc(train_start),
         "trainEnd": format_utc(train_end),
         "forecastStart": format_utc(forecast_start),
@@ -327,14 +294,22 @@ def main(argv: list[str] | None = None) -> None:
         "xgboostHyperparameters": config.xgboost_hyperparams.model_dump(mode="json"),
     }
 
-    report_path = write_run_files(Path(args.output_dir), payload, metadata)
-    payload["reportPath"] = str(report_path)
-    if args.no_save:
-        print("Skipped backend save (--no-save)")
-    else:
-        save_payload(payload, base_url=args.base_url)
+    plot_path = write_run_files(Path(args.output_dir), payload, metadata)
+    if args.persist_model:
+        artifact_dir = persist_workflow(
+            workflow=workflow,
+            config=config,
+            model_root=args.model_root,
+            target=args.target,
+            train_start=train_start,
+            train_end=train_end,
+            created_at=generated_at,
+            weather_path=args.weather_path,
+        )
+        print(f"Wrote model artifact to {artifact_dir}")
+    save_payload(payload, base_url=args.base_url)
 
-    print(f"Wrote barebones report to {report_path}")
+    print(f"Wrote barebones comparison plot to {plot_path}")
     print(f"{MODEL_NAME}: MAE={metrics['mae_kwh']:.4f} kWh, RMSE={metrics['rmse_kwh']:.4f} kWh")
 
 

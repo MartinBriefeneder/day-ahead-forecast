@@ -12,6 +12,7 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -46,13 +47,16 @@ public class EnergySeriesRepository {
     @ConfigProperty(name = "energy.influx.gzip-threshold-bytes", defaultValue = "1")
     int gzipThresholdBytes;
 
+    @ConfigProperty(name = "energy.influx.forecast-dataset-query-window", defaultValue = "P1D")
+    Duration forecastDatasetQueryWindow;
+
     public void saveAll(List<EnergySeries> series) throws Exception {
         if (series.isEmpty()) {
             return;
         }
 
         try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database)) {
-            int batchSize = writeBatchSize;
+            int batchSize = resolvedWriteBatchSize();
             WriteOptions writeOptions = writeOptions();
             List<Point> batch = new ArrayList<>(batchSize);
             for (int start = 0; start < series.size(); start += batchSize) {
@@ -75,6 +79,13 @@ public class EnergySeriesRepository {
                 .build();
     }
 
+    int resolvedWriteBatchSize() {
+        if (writeBatchSize <= 0) {
+            throw new IllegalStateException("energy.influx.write-batch-size must be positive");
+        }
+        return writeBatchSize;
+    }
+
     public List<EnergySeries> find(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) throws Exception {
         if (limit <= 0 || limit > 10_000) {
             throw new IllegalArgumentException("limit must be between 1 and 10000");
@@ -88,11 +99,16 @@ public class EnergySeriesRepository {
     }
 
     public List<ForecastDatasetValue> findForecastDataset(DirectionType direction, Instant from, Instant to) throws Exception {
-        String sql = buildForecastDatasetSql(direction, from, to);
-        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database);
-             Stream<Object[]> stream = client.query(sql)) {
-            return stream.map(this::toForecastDatasetValue).toList();
+        List<ForecastDatasetValue> values = new ArrayList<>();
+        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database)) {
+            for (TimeWindow window : buildForecastDatasetWindows(from, to)) {
+                String sql = buildForecastDatasetSql(direction, window.from(), window.to());
+                try (Stream<Object[]> stream = client.query(sql)) {
+                    stream.map(this::toForecastDatasetValue).forEach(values::add);
+                }
+            }
         }
+        return values;
     }
 
     String buildSql(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) {
@@ -137,6 +153,34 @@ public class EnergySeriesRepository {
                 .append(" AND time < '").append(to).append("'")
                 .append(" GROUP BY time ORDER BY time ASC")
                 .toString();
+    }
+
+    List<TimeWindow> buildForecastDatasetWindows(Instant from, Instant to) {
+        if (from == null || to == null) {
+            throw new IllegalArgumentException("from and to must be provided");
+        }
+        if (!to.isAfter(from)) {
+            throw new IllegalArgumentException("to must be after from");
+        }
+        Duration windowSize = forecastDatasetQueryWindow;
+        if (windowSize == null || windowSize.isZero() || windowSize.isNegative()) {
+            throw new IllegalStateException("energy.influx.forecast-dataset-query-window must be positive");
+        }
+
+        List<TimeWindow> windows = new ArrayList<>();
+        Instant windowFrom = from;
+        while (windowFrom.isBefore(to)) {
+            Instant windowTo = windowFrom.plus(windowSize);
+            if (windowTo.isAfter(to)) {
+                windowTo = to;
+            }
+            windows.add(new TimeWindow(windowFrom, windowTo));
+            windowFrom = windowTo;
+        }
+        return windows;
+    }
+
+    record TimeWindow(Instant from, Instant to) {
     }
 
     private String resolvedToken() {

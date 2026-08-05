@@ -147,19 +147,21 @@ services:
     depends_on:
       influxdb-init:
         condition: service_completed_successfully
-  # chronograf:
-  #   container_name: chronograf
-  #   image: chronograf:latest
-  #   environment:
-  #     INFLUXDB_V3_SUPPORT_ENABLED: "true"
-  #     INFLUXDB_TYPE: influx-v3-core
-  #     INFLUXDB_URL: http://influxdb:8181
-  #     INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?INFLUXDB_TOKEN must be exported before starting Chronograf}
-  #   ports:
-  #     - 8888:8888
-  #   depends_on:
-  #     influxdb-init:
-  #       condition: service_completed_successfully
+  chronograf:
+    profiles:
+      - experimental
+    container_name: chronograf
+    image: chronograf:latest
+    environment:
+      INFLUXDB_V3_SUPPORT_ENABLED: "true"
+      INFLUXDB_TYPE: influx-v3-core
+      INFLUXDB_URL: http://influxdb:8181
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?INFLUXDB_TOKEN must be exported before starting Chronograf}
+    ports:
+      - 8888:8888
+    depends_on:
+      influxdb-init:
+        condition: service_completed_successfully
 volumes:
   influxdb3-data:
   influxdb3-plugins:

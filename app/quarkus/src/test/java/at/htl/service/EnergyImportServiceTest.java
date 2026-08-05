@@ -12,6 +12,9 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class EnergyImportServiceTest {
 
@@ -29,12 +32,17 @@ class EnergyImportServiceTest {
         Files.writeString(csv, content);
 
         EnergyImportService service = new EnergyImportService();
+        Logger logger = mock(Logger.class);
         setField(service, "csvImportService", new EnergyCsvImportService());
         setField(service, "energySeriesRepository", new EnergySeriesRepository());
-        setField(service, "logger", Logger.getLogger(EnergyImportService.class));
+        setField(service, "logger", logger);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> service.importCsv(csv));
         assertTrue(exception.getMessage().contains("CSV validation failed"));
+        assertTrue(exception.getMessage().contains("row=3"));
+        assertTrue(exception.getMessage().contains("column=Gesamtbezug [kWh]"));
+        assertTrue(exception.getMessage().contains("rawValue=abc"));
+        verify(logger).error(contains("Invalid numeric interval value"));
         assertEquals(content, Files.readString(csv));
     }
 

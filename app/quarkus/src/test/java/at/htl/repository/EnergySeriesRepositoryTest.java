@@ -6,9 +6,12 @@ import com.influxdb.v3.client.write.WriteOptions;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class EnergySeriesRepositoryTest {
 
@@ -47,6 +50,25 @@ class EnergySeriesRepositoryTest {
     }
 
     @Test
+    void buildForecastDatasetWindowsSplitsRangeIntoHalfOpenChunks() throws Exception {
+        EnergySeriesRepository repository = new EnergySeriesRepository();
+        setField(repository, "forecastDatasetQueryWindow", Duration.ofDays(1));
+
+        List<EnergySeriesRepository.TimeWindow> windows = repository.buildForecastDatasetWindows(
+                Instant.parse("2025-06-01T00:00:00Z"),
+                Instant.parse("2025-06-03T06:00:00Z")
+        );
+
+        assertEquals(3, windows.size());
+        assertEquals(Instant.parse("2025-06-01T00:00:00Z"), windows.get(0).from());
+        assertEquals(Instant.parse("2025-06-02T00:00:00Z"), windows.get(0).to());
+        assertEquals(Instant.parse("2025-06-02T00:00:00Z"), windows.get(1).from());
+        assertEquals(Instant.parse("2025-06-03T00:00:00Z"), windows.get(1).to());
+        assertEquals(Instant.parse("2025-06-03T00:00:00Z"), windows.get(2).from());
+        assertEquals(Instant.parse("2025-06-03T06:00:00Z"), windows.get(2).to());
+    }
+
+    @Test
     void writeOptionsUseConfiguredGzipThreshold() throws Exception {
         EnergySeriesRepository repository = new EnergySeriesRepository();
         setField(repository, "gzipThresholdBytes", 1);
@@ -54,6 +76,16 @@ class EnergySeriesRepositoryTest {
         WriteOptions options = repository.writeOptions();
 
         assertEquals(1, getField(options, "gzipThreshold"));
+    }
+
+    @Test
+    void resolvedWriteBatchSizeRejectsNonPositiveValues() throws Exception {
+        EnergySeriesRepository repository = new EnergySeriesRepository();
+        setField(repository, "writeBatchSize", 0);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, repository::resolvedWriteBatchSize);
+
+        assertEquals("energy.influx.write-batch-size must be positive", exception.getMessage());
     }
 
     private void setField(Object target, String name, Object value) throws Exception {

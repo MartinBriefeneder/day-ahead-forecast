@@ -31,6 +31,34 @@ class ForecastRunServiceTest {
     }
 
     @Test
+    void savesComingWeeksRunWithoutActualValues() throws Exception {
+        StubRepository repository = new StubRepository();
+        ForecastRunService service = serviceWithRepository(repository);
+        ForecastRunRequest request = new ForecastRunRequest(
+                "consumption-historical-average-20251201T000000Z",
+                "historical-average",
+                "consumption",
+                Instant.parse("2025-12-01T00:00:00Z"),
+                Instant.parse("2025-09-01T00:00:00Z"),
+                Instant.parse("2025-12-01T00:00:00Z"),
+                Instant.parse("2025-12-01T00:00:00Z"),
+                Instant.parse("2025-12-15T00:00:00Z"),
+                "PT15M",
+                "P14D",
+                "simple-benchmark",
+                null,
+                List.of(new ForecastPoint(Instant.parse("2025-12-01T00:00:00Z"), 12.5, null)),
+                List.of(new ForecastMetric("total_forecast_kwh", 12.5))
+        );
+
+        ForecastRunSaveResponse response = service.save(request);
+
+        assertEquals("consumption-historical-average-20251201T000000Z", response.runId());
+        assertEquals("P14D", repository.savedRequest.horizon());
+        assertEquals(null, repository.savedRequest.points().getFirst().actualKwh());
+    }
+
+    @Test
     void rejectsInvalidForecastRuns() throws Exception {
         ForecastRunService service = serviceWithRepository(new StubRepository());
         ForecastRunRequest valid = validRequest();
@@ -66,7 +94,7 @@ class ForecastRunServiceTest {
                 Instant.parse("2025-12-01T00:00:00Z"),
                 Instant.parse("2025-12-02T00:00:00Z"),
                 "PT15M",
-                null,
+                "P14D",
                 "simple-benchmark",
                 "app/reports/forecast-runs/forecast-backtest-report.md",
                 List.of(

@@ -6,14 +6,7 @@ cd "$SCRIPT_DIR"
 
 INFLUX_DATABASE="energy"
 INFLUX_WAIT_SECONDS="${INFLUX_WAIT_SECONDS:-60}"
-
-if [ -f ./.env ]; then
-  set -a
-  . ./.env
-  set +a
-fi
-
-: "${INFLUXDB_TOKEN:?set INFLUXDB_TOKEN or create app/.env before running this script}"
+export INFLUXDB_TOKEN=apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg
 
 wait_for_influx() {
   attempts=0

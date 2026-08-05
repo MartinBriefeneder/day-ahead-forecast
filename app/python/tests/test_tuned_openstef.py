@@ -93,7 +93,6 @@ class TunedOpenStefTest(unittest.TestCase):
 
         self.assertEqual(3, args.n_trials)
         self.assertFalse(hasattr(args, "models"))
-        self.assertFalse(args.no_save)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import pandas as pd
 
 from weekly_weather_forecast import (
     build_forecast_index,
+    complete_training_data,
     generation_forecast,
     weather_statistical_forecast,
     write_plotly_html,
@@ -42,6 +43,32 @@ class WeeklyWeatherForecastTest(unittest.TestCase):
                 forecast_weather=pd.DataFrame({"shortwave_radiation": [1.0]}, index=index),
             )
 
+    def test_complete_training_data_drops_missing_historical_weather_rows(self):
+        index = pd.date_range("2025-10-26T00:00:00Z", periods=3, freq="15min")
+        training = pd.DataFrame(
+            {
+                "generation": [1.0, 2.0, 3.0],
+                "temperature_2m": [10.0, None, 12.0],
+                "shortwave_radiation": [0.0, 0.0, 5.0],
+            },
+            index=index,
+        )
+
+        complete = complete_training_data(
+            training,
+            target="generation",
+            weather_features=("temperature_2m", "shortwave_radiation"),
+        )
+
+        self.assertEqual([index[0], index[2]], list(complete.index))
+
+    def test_complete_training_data_rejects_fully_incomplete_training_data(self):
+        index = pd.date_range("2025-10-26T00:00:00Z", periods=1, freq="15min")
+        training = pd.DataFrame({"generation": [1.0], "temperature_2m": [None]}, index=index)
+
+        with self.assertRaisesRegex(ValueError, "no rows with complete"):
+            complete_training_data(training, target="generation", weather_features=("temperature_2m",))
+
     def test_write_plotly_html_writes_named_report(self):
         index = pd.date_range("2026-08-06T00:00:00Z", periods=1, freq="15min")
         forecast = pd.Series([1.0], index=index)
@@ -50,8 +77,7 @@ class WeeklyWeatherForecastTest(unittest.TestCase):
             "trainStart": "2025-06-11T00:00:00Z",
             "trainEnd": "2026-06-01T00:00:00Z",
             "forecastEnd": "2026-08-06T00:15:00Z",
-            "latitude": 47.9,
-            "longitude": 14.1,
+            "weatherLocationId": 4,
         }
 
         with tempfile.TemporaryDirectory() as directory:

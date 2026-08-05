@@ -7,10 +7,9 @@ from typing import Any
 
 import pandas as pd
 
-from barebones_openstef import WEATHER_FEATURES
 from forecast_dataset_api import fetch_forecast_dataframe
 from main import historical_average_forecast, parse_utc_argument
-from weather_features import align_weather_features, fetch_open_meteo_forecast
+from weather_features import DEFAULT_GRIDOO_LOCATION_ID, align_weather_features, fetch_gridoo_forecast
 
 BASE_URL = "http://localhost:8080"
 DEFAULT_TARGET = "generation"
@@ -18,11 +17,10 @@ DEFAULT_TRAIN_START = "2025-06-11T00:00:00Z"
 DEFAULT_TRAIN_END = "2026-06-01T00:00:00Z"
 DEFAULT_FORECAST_START = "2026-08-06T00:00:00Z"
 DEFAULT_FORECAST_DAYS = 7
-DEFAULT_LATITUDE = 47.9056
-DEFAULT_LONGITUDE = 14.1223
 OUTPUT_DIR = (Path(__file__).resolve().parent / "../reports/forecast-runs").resolve()
 MODEL_NAME = "weather-statistical-weekly"
 SAMPLE_INTERVAL = "15min"
+WEATHER_FEATURES = ("temperature_2m", "shortwave_radiation")
 
 
 def format_utc(value: datetime) -> str:
@@ -116,6 +114,14 @@ def daily_totals(series: pd.Series) -> pd.Series:
     return series.resample("1D").sum()
 
 
+def complete_training_data(training: pd.DataFrame, *, target: str, weather_features: tuple[str, ...]) -> pd.DataFrame:
+    required_columns = [target, *weather_features]
+    complete = training.dropna(subset=required_columns)
+    if complete.empty:
+        raise ValueError("Training dataset has no rows with complete energy and historical weather data.")
+    return complete
+
+
 def write_plotly_html(
     *,
     output_dir: Path,
@@ -140,13 +146,20 @@ def write_plotly_html(
         vertical_spacing=0.08,
         subplot_titles=(
             f"Forecast {target_label}",
-            "Upcoming weather forecast",
+            "Gridoo weather forecast inputs",
             "Daily expected energy totals",
         ),
         specs=[[{"secondary_y": False}], [{"secondary_y": True}], [{"secondary_y": False}]],
     )
     fig.add_trace(
-        go.Scatter(x=forecast.index, y=forecast.values, mode="lines", name="Forecast kWh", line={"width": 2}),
+        go.Scatter(
+            x=forecast.index,
+            y=forecast.values,
+            mode="lines",
+            name="Forecast kWh",
+            line={"width": 2},
+            hovertemplate="%{x|%Y-%m-%d %H:%M UTC}<br>%{y:.3f} kWh<extra></extra>",
+        ),
         row=1,
         col=1,
     )
@@ -157,6 +170,7 @@ def write_plotly_html(
             mode="lines",
             name="Shortwave radiation W/m2",
             line={"color": "#f59e0b"},
+            hovertemplate="%{x|%Y-%m-%d %H:%M UTC}<br>%{y:.1f} W/m2<extra></extra>",
         ),
         row=2,
         col=1,
@@ -169,20 +183,32 @@ def write_plotly_html(
             mode="lines",
             name="Temperature degC",
             line={"color": "#dc2626"},
+            hovertemplate="%{x|%Y-%m-%d %H:%M UTC}<br>%{y:.1f} degC<extra></extra>",
         ),
         row=2,
         col=1,
         secondary_y=True,
     )
     totals = daily_totals(forecast)
-    fig.add_trace(go.Bar(x=totals.index, y=totals.values, name="Daily kWh"), row=3, col=1)
+    fig.add_trace(
+        go.Bar(
+            x=totals.index,
+            y=totals.values,
+            name="Daily kWh",
+            hovertemplate="%{x|%Y-%m-%d}<br>%{y:.2f} kWh<extra></extra>",
+        ),
+        row=3,
+        col=1,
+    )
     fig.update_yaxes(title_text="kWh per 15-minute interval", row=1, col=1)
     fig.update_yaxes(title_text="W/m2", row=2, col=1, secondary_y=False)
     fig.update_yaxes(title_text="degC", row=2, col=1, secondary_y=True)
     fig.update_yaxes(title_text="kWh per day", row=3, col=1)
+    fig.update_xaxes(tickformat="%Y-%m-%d\n%H:%M", row=1, col=1)
+    fig.update_xaxes(tickformat="%Y-%m-%d\n%H:%M", row=2, col=1)
+    fig.update_xaxes(title_text="Day (UTC)", tickformat="%Y-%m-%d", row=3, col=1)
     fig.update_layout(
         title=f"{target_label} Weekly Forecast From Historical Statistics And Weather Forecast",
-        xaxis_title="Time (UTC)",
         hovermode="x unified",
         template="plotly_white",
         height=900,
@@ -191,7 +217,7 @@ def write_plotly_html(
             {
                 "text": (
                     f"Model: {MODEL_NAME}<br>Train: {metadata['trainStart']} to {metadata['trainEnd']}<br>"
-                    f"Weather: Open-Meteo forecast at {metadata['latitude']}, {metadata['longitude']}"
+                    f"Weather: Gridoo forecast for location {metadata['weatherLocationId']}"
                 ),
                 "xref": "paper",
                 "yref": "paper",
@@ -215,8 +241,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-end", default=DEFAULT_TRAIN_END)
     parser.add_argument("--forecast-start", default=DEFAULT_FORECAST_START)
     parser.add_argument("--forecast-days", type=int, default=DEFAULT_FORECAST_DAYS)
-    parser.add_argument("--latitude", type=float, default=DEFAULT_LATITUDE)
-    parser.add_argument("--longitude", type=float, default=DEFAULT_LONGITUDE)
+    parser.add_argument("--weather-location-id", type=int, default=DEFAULT_GRIDOO_LOCATION_ID)
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
     return parser
 
@@ -239,16 +264,20 @@ def main(argv: list[str] | None = None) -> None:
         end=format_utc(train_end),
         include_weather=True,
         weather_features=WEATHER_FEATURES,
-        require_complete_weather=True,
+        require_complete_weather=False,
     )
     if training.empty:
         raise ValueError("Training dataset is empty. Check imported historical energy data and historical weather data.")
+    complete_training = complete_training_data(training, target=args.target, weather_features=WEATHER_FEATURES)
+    weather_diagnostics = training.attrs.get("weather_diagnostics", {})
+    missing_weather_count = weather_diagnostics.get("alignment", {}).get("missingWeatherIntervalCount", 0)
+    if missing_weather_count:
+        print(f"Warning: dropped {len(training) - len(complete_training):,} training rows with incomplete historical weather data.")
 
-    weather = fetch_open_meteo_forecast(
-        latitude=args.latitude,
-        longitude=args.longitude,
+    weather = fetch_gridoo_forecast(
         start=forecast_start,
         end=forecast_end,
+        location_id=args.weather_location_id,
         requested_features=WEATHER_FEATURES,
     )
     forecast_weather, weather_alignment = align_weather_features(
@@ -259,8 +288,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     forecast = weather_statistical_forecast(
         target=args.target,
-        train=training[args.target],
-        train_weather=training[list(WEATHER_FEATURES)],
+        train=complete_training[args.target],
+        train_weather=complete_training[list(WEATHER_FEATURES)],
         forecast_weather=forecast_weather,
     )
 
@@ -273,8 +302,12 @@ def main(argv: list[str] | None = None) -> None:
         "forecastStart": format_utc(forecast_start),
         "forecastEnd": format_utc(forecast_end),
         "sampleInterval": "PT15M",
-        "latitude": args.latitude,
-        "longitude": args.longitude,
+        "weatherProvider": "Gridoo Weather API",
+        "weatherLocationId": args.weather_location_id,
+        "forecastWeatherSource": weather.metadata,
+        "historicalWeatherAlignment": weather_diagnostics.get("alignment", {}),
+        "trainingRows": int(len(training)),
+        "completeTrainingRows": int(len(complete_training)),
         "weatherAlignment": weather_alignment,
     }
     output_path = write_plotly_html(

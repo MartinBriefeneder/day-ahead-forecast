@@ -3,6 +3,7 @@ package at.htl.resource;
 import at.htl.model.ForecastComparisonResponse;
 import at.htl.model.ForecastRunRequest;
 import at.htl.model.ForecastRunSaveResponse;
+import at.htl.model.ForecastRunSummary;
 import at.htl.service.ForecastRunService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -17,6 +18,8 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import java.util.List;
+
 @Path("/api/forecast-runs")
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
@@ -29,6 +32,16 @@ public class ForecastRunResource {
     public ForecastRunSaveResponse save(ForecastRunRequest request) throws Exception {
         try {
             return forecastRunService.save(request);
+        } catch (IllegalArgumentException exception) {
+            throw new WebApplicationException(exception.getMessage(), Response.Status.BAD_REQUEST);
+        }
+    }
+
+    @GET
+    public List<ForecastRunSummary> listRuns(@QueryParam("target") String target,
+                                             @QueryParam("limit") @DefaultValue("100") int limit) throws Exception {
+        try {
+            return forecastRunService.listRuns(target, limit);
         } catch (IllegalArgumentException exception) {
             throw new WebApplicationException(exception.getMessage(), Response.Status.BAD_REQUEST);
         }
