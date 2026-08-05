@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+import requests
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_WEATHER_PATH = REPO_ROOT / "data/raw/Historical data Wetter(1).xlsx"
@@ -63,6 +64,14 @@ WEATHER_FEATURES: dict[str, WeatherFeature] = {
     ),
 }
 DEFAULT_WEATHER_FEATURES = tuple(WEATHER_FEATURES)
+OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_VARIABLES = {
+    "temperature_2m": "temperature_2m",
+    "relative_humidity_2m": "relative_humidity_2m",
+    "wind_speed_10m": "wind_speed_10m",
+    "shortwave_radiation": "shortwave_radiation",
+    "surface_pressure": "surface_pressure",
+}
 
 
 def load_weather_features(
@@ -266,6 +275,64 @@ def add_weather_features(
     }
     result.attrs["weather_diagnostics"] = diagnostics
     return result, diagnostics
+
+
+def fetch_open_meteo_forecast(
+    *,
+    latitude: float,
+    longitude: float,
+    start: datetime,
+    end: datetime,
+    requested_features: Iterable[str] | None = None,
+    timeout_seconds: int = 30,
+    url: str = OPEN_METEO_FORECAST_URL,
+) -> WeatherFeatureDataset:
+    feature_names = _requested_feature_names(requested_features)
+    variables = [OPEN_METEO_VARIABLES[feature] for feature in feature_names]
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "timezone": "UTC",
+        "start_date": start.date().isoformat(),
+        "end_date": (end - timedelta(seconds=1)).date().isoformat(),
+        "minutely_15": ",".join(variables),
+    }
+
+    response = requests.get(url, params=params, timeout=timeout_seconds)
+    response.raise_for_status()
+    payload = response.json()
+    data = _open_meteo_frame(payload, feature_names)
+    data = data[(data.index >= pd.Timestamp(start)) & (data.index < pd.Timestamp(end))]
+    metadata = {
+        "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "source": "Open-Meteo Forecast API",
+        "sourceUrl": url,
+        "latitude": latitude,
+        "longitude": longitude,
+        "utcStart": start.isoformat().replace("+00:00", "Z"),
+        "utcEnd": end.isoformat().replace("+00:00", "Z"),
+        "featureNames": list(feature_names),
+        "intervalCount": int(len(data)),
+    }
+    return WeatherFeatureDataset(data=data, metadata=metadata)
+
+
+def _open_meteo_frame(payload: dict, feature_names: Iterable[str]) -> pd.DataFrame:
+    source = payload.get("minutely_15")
+    if not source:
+        raise ValueError("Open-Meteo response does not contain minutely_15 forecast data")
+    if "time" not in source:
+        raise ValueError("Open-Meteo minutely_15 response does not contain time values")
+
+    data = pd.DataFrame({"timestamp": pd.to_datetime(source["time"], utc=True, errors="coerce")})
+    for feature in feature_names:
+        source_name = OPEN_METEO_VARIABLES[feature]
+        if source_name not in source:
+            raise ValueError(f"Open-Meteo response is missing variable: {source_name}")
+        data[feature] = pd.to_numeric(pd.Series(source[source_name]), errors="coerce")
+
+    data = data.dropna(subset=["timestamp"]).set_index("timestamp").sort_index()
+    return data[list(feature_names)]
 
 
 def weather_inspection_markdown(metadata: dict) -> str:

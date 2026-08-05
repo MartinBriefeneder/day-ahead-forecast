@@ -7,6 +7,7 @@ from weather_features import (
     WeatherFeatureDataset,
     add_weather_features,
     align_weather_features,
+    fetch_open_meteo_forecast,
     inspect_weather_frame,
     normalize_weather_features,
 )
@@ -102,6 +103,36 @@ class WeatherFeaturesTest(unittest.TestCase):
         self.assertEqual(12.0, result.loc[index[0], "temperature_2m"])
         self.assertEqual(1, diagnostics["alignment"]["alignedWeatherIntervalCount"])
         self.assertIn("weather_diagnostics", result.attrs)
+
+    def test_fetch_open_meteo_forecast_maps_minutely_15_response(self):
+        payload = {
+            "minutely_15": {
+                "time": ["2026-08-06T00:00", "2026-08-06T00:15"],
+                "temperature_2m": [17.0, 17.5],
+                "shortwave_radiation": [0.0, 5.0],
+            }
+        }
+
+        class Response:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return payload
+
+        with patch("weather_features.requests.get", return_value=Response()) as get:
+            dataset = fetch_open_meteo_forecast(
+                latitude=47.9,
+                longitude=14.1,
+                start=pd.Timestamp("2026-08-06T00:00:00Z").to_pydatetime(),
+                end=pd.Timestamp("2026-08-06T00:30:00Z").to_pydatetime(),
+                requested_features=["temperature_2m", "shortwave_radiation"],
+            )
+
+        self.assertEqual(["temperature_2m", "shortwave_radiation"], list(dataset.data.columns))
+        self.assertEqual(pd.Timestamp("2026-08-06T00:00:00Z"), dataset.data.index[0])
+        self.assertEqual(2, dataset.metadata["intervalCount"])
+        self.assertEqual("UTC", get.call_args.kwargs["params"]["timezone"])
 
 
 if __name__ == "__main__":
