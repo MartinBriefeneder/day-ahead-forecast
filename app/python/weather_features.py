@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import argparse
-import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,8 +8,8 @@ from typing import Iterable
 import pandas as pd
 import requests
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_WEATHER_PATH = REPO_ROOT / "data/raw/Historical data Wetter(1).xlsx"
+APP_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_WEATHER_PATH = APP_ROOT / "data/raw/Historical data Wetter(1).xlsx"
 WEATHER_SHEET_NAME = "Données"
 LOCAL_TIMEZONE = "Europe/Vienna"
 SAMPLE_FREQUENCY = "15min"
@@ -364,55 +362,6 @@ def _utc_timestamp(value: datetime) -> pd.Timestamp:
     return timestamp.tz_convert("UTC")
 
 
-def weather_inspection_markdown(metadata: dict) -> str:
-    lines = [
-        "# Historical Weather Inspection Report",
-        "",
-        f"- Generated at: `{metadata.get('generatedAt')}`",
-        f"- Source: `{metadata.get('sourcePath')}`",
-        f"- Sheet: `{metadata.get('sheetName')}`",
-        f"- Rows: `{metadata.get('rowCount')}`",
-        f"- Columns: `{metadata.get('columnCount')}`",
-        f"- Timestamp column: `{metadata.get('timestampColumn')}`",
-        f"- Timezone assumption: `{metadata.get('sourceTimezoneAssumption')}`",
-        f"- Local range: `{metadata.get('localStart')}` to `{metadata.get('localEnd')}`",
-        "",
-        "## Timestamp Diagnostics",
-        "",
-        f"- Expected resolution: `{metadata.get('resolution', {}).get('expected')}`",
-        f"- Most common resolution: `{metadata.get('resolution', {}).get('mostCommon')}`",
-        f"- Quarter-hour aligned: `{metadata.get('resolution', {}).get('quarterHourAligned')}`",
-        f"- Parse failures: `{metadata.get('timestampParseFailureCount')}`",
-        f"- Missing local timestamps: `{metadata.get('missingTimestampCount')}`",
-        f"- Duplicate local timestamps: `{metadata.get('duplicateTimestampCount')}`",
-        f"- Ambiguous DST timestamps: `{metadata.get('ambiguousDstTimestampCount')}`",
-        f"- Nonexistent DST timestamps: `{metadata.get('nonexistentDstTimestampCount')}`",
-        "",
-        "## Normalized Features",
-        "",
-        "| Feature | Source column | Unit | Description |",
-        "|---|---|---|---|",
-    ]
-    for feature in metadata.get("features", []):
-        lines.append(
-            f"| `{feature['name']}` | `{feature['source_column']}` | `{feature['unit']}` | {feature['description']} |"
-        )
-
-    lines.extend(["", "## Source Columns", ""])
-    lines.extend(f"- `{column}`" for column in metadata.get("columns", []))
-    lines.extend(["", "## Unresolved Questions", ""])
-    lines.extend(f"- {question}" for question in metadata.get("unresolvedQuestions", []))
-    lines.append("")
-    return "\n".join(lines)
-
-
-def write_weather_inspection_report(metadata: dict, output_path: str | Path) -> None:
-    report_path = Path(output_path)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(weather_inspection_markdown(metadata), encoding="utf-8")
-    report_path.with_suffix(".json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-
-
 def _weather_path(path: str | Path | None) -> Path:
     weather_path = DEFAULT_WEATHER_PATH if path is None else Path(path)
     if not weather_path.exists():
@@ -520,35 +469,3 @@ def _format_timestamp_examples(values: pd.Series) -> list[str]:
 def _format_index_examples(index: pd.Index) -> list[str]:
     return [_format_timestamp(value) for value in pd.DatetimeIndex(index).dropna().sort_values().unique()[:8]]
 
-
-def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Inspect and normalize local historical weather data.")
-    subparsers = parser.add_subparsers(dest="command")
-
-    inspect_parser = subparsers.add_parser("inspect", help="Write a historical weather inspection report.")
-    inspect_parser.add_argument("--weather-path", default=str(DEFAULT_WEATHER_PATH))
-    inspect_parser.add_argument("--sheet", default=WEATHER_SHEET_NAME)
-    inspect_parser.add_argument("--source-timezone", default=LOCAL_TIMEZONE)
-    inspect_parser.add_argument(
-        "--output",
-        default=str(REPO_ROOT / "app/reports/weather-inspection-report.md"),
-        help="Markdown report path. A JSON file is written next to it.",
-    )
-
-    args = parser.parse_args(argv)
-    if args.command != "inspect":
-        parser.print_help()
-        return
-
-    metadata = inspect_weather_source(
-        path=args.weather_path,
-        source_timezone=args.source_timezone,
-        sheet_name=args.sheet,
-    )
-    write_weather_inspection_report(metadata, args.output)
-    print(f"Wrote weather inspection report to {args.output}")
-    print(f"Wrote weather inspection metadata to {Path(args.output).with_suffix('.json')}")
-
-
-if __name__ == "__main__":
-    main()

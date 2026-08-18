@@ -79,6 +79,11 @@ public class ForecastRunRepository {
                 if (isMissingTableException(exception, metadataMeasurement)) {
                     return List.of();
                 }
+                if (isMissingColumnException(exception, "report_path")) {
+                    try (Stream<Object[]> stream = client.query(buildRunsSql(target, limit, false))) {
+                        return stream.map(this::toRunSummary).toList();
+                    }
+                }
                 throw exception;
             }
         }
@@ -110,13 +115,21 @@ public class ForecastRunRepository {
     }
 
     String buildRunsSql(String target, int limit) {
+        return buildRunsSql(target, limit, true);
+    }
+
+    String buildRunsSql(String target, int limit, boolean includeReportPath) {
         if (limit <= 0 || limit > 1000) {
             throw new IllegalArgumentException("limit must be between 1 and 1000");
         }
 
         StringBuilder sql = new StringBuilder()
                 .append("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, ")
-                .append("sample_interval, horizon, model_family, report_path FROM ")
+                .append("sample_interval, horizon, model_family");
+        if (includeReportPath) {
+            sql.append(", report_path");
+        }
+        sql.append(" FROM ")
                 .append(quoteIdentifier(metadataMeasurement));
         if (target != null && !target.isBlank()) {
             sql.append(" WHERE target = '").append(escapeSqlLiteral(target)).append("'");
@@ -137,8 +150,13 @@ public class ForecastRunRepository {
                 stringOrNull(row[8]),
                 stringOrNull(row[9]),
                 stringOrNull(row[10]),
-                stringOrNull(row[11])
+                row.length > 11 ? stringOrNull(row[11]) : null
         );
+    }
+
+    boolean isMissingColumnException(RuntimeException exception, String column) {
+        String message = exception.getMessage();
+        return message != null && message.contains("No field named " + column + ".");
     }
 
     boolean isMissingTableException(RuntimeException exception, String table) {

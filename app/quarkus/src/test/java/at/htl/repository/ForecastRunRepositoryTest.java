@@ -68,6 +68,16 @@ class ForecastRunRepositoryTest {
     }
 
     @Test
+    void buildRunsSqlCanOmitMissingReportPath() throws Exception {
+        ForecastRunRepository repository = new ForecastRunRepository();
+        setField(repository, "metadataMeasurement", "forecast_run_metadata");
+
+        String sql = repository.buildRunsSql("generation", 25, false);
+
+        assertEquals("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, sample_interval, horizon, model_family FROM \"forecast_run_metadata\" WHERE target = 'generation' ORDER BY time DESC LIMIT 25", sql);
+    }
+
+    @Test
     void toComparisonPointMapsNullableActualAndError() {
         ForecastRunRepository repository = new ForecastRunRepository();
 
@@ -107,12 +117,42 @@ class ForecastRunRepositoryTest {
     }
 
     @Test
+    void toRunSummaryAllowsMissingReportPathColumn() {
+        ForecastRunRepository repository = new ForecastRunRepository();
+
+        ForecastRunSummary summary = repository.toRunSummary(new Object[]{
+                "run-1",
+                "historical-average",
+                "consumption",
+                "2026-01-01T00:00:00Z",
+                "2025-11-01T00:00:00Z",
+                "2025-12-01T00:00:00Z",
+                "2025-12-01T00:00:00Z",
+                "2025-12-02T00:00:00Z",
+                "PT15M",
+                "P14D",
+                "simple-benchmark"
+        });
+
+        assertEquals(null, summary.reportPath());
+    }
+
+    @Test
     void isMissingTableExceptionRecognizesMetadataTable() {
         ForecastRunRepository repository = new ForecastRunRepository();
         RuntimeException exception = new RuntimeException("INVALID_ARGUMENT: Error while logically planning query: Error during planning: table 'public.iox.forecast_run_metadata' not found");
 
         assertEquals(true, repository.isMissingTableException(exception, "forecast_run_metadata"));
         assertEquals(false, repository.isMissingTableException(exception, "energy_forecasts"));
+    }
+
+    @Test
+    void isMissingColumnExceptionRecognizesReportPath() {
+        ForecastRunRepository repository = new ForecastRunRepository();
+        RuntimeException exception = new RuntimeException("INVALID_ARGUMENT: Error while logically planning query: Schema error: No field named report_path. Valid fields are forecast_run_metadata.forecast_end");
+
+        assertEquals(true, repository.isMissingColumnException(exception, "report_path"));
+        assertEquals(false, repository.isMissingColumnException(exception, "model_family"));
     }
 
     @Test

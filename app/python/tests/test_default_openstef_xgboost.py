@@ -8,19 +8,18 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from barebones_openstef import (
+from default_openstef_xgboost import (
     MODEL_NAME,
     api_payload,
     build_parser,
     parse_utc,
-    persist_workflow,
     run_id,
     save_payload,
     write_comparison_plot,
 )
 
 
-class BarebonesOpenStefTest(unittest.TestCase):
+class DefaultOpenStefXGBoostTest(unittest.TestCase):
     def test_parse_utc_accepts_z_suffix(self):
         self.assertEqual(
             datetime(2025, 6, 11, tzinfo=timezone.utc),
@@ -29,7 +28,7 @@ class BarebonesOpenStefTest(unittest.TestCase):
 
     def test_run_id_contains_target_model_and_forecast_start(self):
         self.assertEqual(
-            "generation-openstef-barebones-20250909T000000Z",
+            "generation-openstef-default-xgboost-20250909T000000Z",
             run_id("generation", datetime(2025, 9, 9, tzinfo=timezone.utc)),
         )
 
@@ -61,7 +60,7 @@ class BarebonesOpenStefTest(unittest.TestCase):
         payload = {"runId": "run-1", "points": [object()], "metrics": [object()]}
 
         with patch(
-            "barebones_openstef.save_forecast_run",
+            "default_openstef_xgboost.save_forecast_run",
             return_value={"runId": "run-1", "forecastPoints": 1, "metrics": 1},
         ):
             output = StringIO()
@@ -87,52 +86,20 @@ class BarebonesOpenStefTest(unittest.TestCase):
             path = write_comparison_plot(Path(directory), payload, metadata)
             html = path.read_text(encoding="utf-8")
 
-        self.assertEqual("openstef-barebones-comparison.html", path.name)
-        self.assertIn("Barebones Forecast vs Actual", html)
+        self.assertEqual("openstef-default-xgboost-comparison.html", path.name)
+        self.assertIn("Default XGBoost Forecast vs Actual", html)
         self.assertIn("Time (UTC)", html)
         self.assertIn("Generation energy (kWh per 15-minute interval)", html)
         self.assertIn(MODEL_NAME, html)
 
-    def test_parser_is_barebones_only(self):
+    def test_parser_is_default_openstef_xgboost_only(self):
         args = build_parser().parse_args([])
 
         self.assertEqual("generation", args.target)
-        self.assertFalse(args.persist_model)
+        self.assertFalse(hasattr(args, "persist_model"))
+        self.assertFalse(hasattr(args, "model_root"))
         self.assertFalse(hasattr(args, "models"))
         self.assertFalse(hasattr(args, "n_trials"))
-
-    def test_parser_can_enable_model_persistence(self):
-        args = build_parser().parse_args(["--persist-model", "--model-root", "/tmp/models"])
-
-        self.assertTrue(args.persist_model)
-        self.assertEqual("/tmp/models", args.model_root)
-
-    def test_persist_workflow_writes_barebones_artifact(self):
-        class Config:
-            class Hyperparameters:
-                def model_dump(self, *, mode):
-                    return {"mode": mode}
-
-            xgboost_hyperparams = Hyperparameters()
-
-        with TemporaryDirectory() as directory:
-            artifact_dir = persist_workflow(
-                workflow={"workflow": "stub"},
-                config=Config(),
-                model_root=directory,
-                target="generation",
-                train_start=datetime(2025, 6, 11, tzinfo=timezone.utc),
-                train_end=datetime(2025, 9, 9, tzinfo=timezone.utc),
-                created_at=datetime(2026, 8, 5, 12, tzinfo=timezone.utc),
-                weather_path="weather.xlsx",
-            )
-
-            metadata = (artifact_dir / "metadata.json").read_text(encoding="utf-8")
-            schema = (artifact_dir / "feature-schema.json").read_text(encoding="utf-8")
-
-        self.assertEqual("generation-openstef-barebones-20260805T120000Z", artifact_dir.name)
-        self.assertIn('"model": "openstef-barebones"', metadata)
-        self.assertIn('"targetColumn": "generation"', schema)
 
 
 if __name__ == "__main__":

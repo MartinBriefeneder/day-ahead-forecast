@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 import pandas as pd
+import requests
 
 from forecast_dataset_api import fetch_forecast_dataframe
 
@@ -51,6 +52,11 @@ class ForecastDatasetApiTest(unittest.TestCase):
         self.assertEqual(["consumption", "temperature_2m"], list(data.columns))
         self.assertEqual(12.0, data["temperature_2m"].iloc[0])
         self.assertEqual(1, data.attrs["weather_diagnostics"]["alignment"]["alignedWeatherIntervalCount"])
+
+    def test_fetch_dataframe_reports_backend_connection_failure(self):
+        with patch("forecast_dataset_api.requests.get", side_effect=requests.ConnectionError("refused")):
+            with self.assertRaisesRegex(ConnectionError, "Start it from app/ with ./run-server.sh or ./run-dev.sh"):
+                fetch_forecast_dataframe()
 
 
 if __name__ == "__main__":

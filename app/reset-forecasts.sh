@@ -7,7 +7,16 @@ cd "$SCRIPT_DIR"
 INFLUX_DATABASE="energy"
 INFLUX_WAIT_SECONDS="${INFLUX_WAIT_SECONDS:-60}"
 FORECAST_TABLES="energy_forecasts forecast_evaluations forecast_run_metadata"
-export INFLUXDB_TOKEN=apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg
+DEFAULT_INFLUXDB_TOKEN="apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg"
+
+if [ -f ./.env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
+: "${INFLUXDB_TOKEN:=$DEFAULT_INFLUXDB_TOKEN}"
+export INFLUXDB_TOKEN
 
 if [ "${1:-}" = "--help" ]; then
   printf 'Usage: %s\n' "$0"

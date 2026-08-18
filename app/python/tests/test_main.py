@@ -13,8 +13,8 @@ class MainBacktestReportTest(unittest.TestCase):
         actual = pd.Series([1.0, 1.1, 1.2, 1.3], index=index, name="consumption")
         payloads = [
             {
-                "runId": "consumption-historical-average-20250909T000000Z",
-                "model": "historical-average",
+                "runId": "consumption-weekly-persistence-20250909T000000Z",
+                "model": "weekly-persistence",
                 "target": "consumption",
                 "generatedAt": "2025-09-08T00:00:00Z",
                 "trainStart": "2025-09-08T00:00:00Z",
@@ -52,7 +52,7 @@ class MainBacktestReportTest(unittest.TestCase):
         self.assertIn("Expected Energy Totals", dashboard)
         self.assertIn("Actuals and forecasts", dashboard)
         self.assertIn("Interval error", dashboard)
-        self.assertIn("historical-average", dashboard)
+        self.assertIn("weekly-persistence", dashboard)
 
     def test_parser_does_not_accept_no_save(self):
         with self.assertRaises(SystemExit):

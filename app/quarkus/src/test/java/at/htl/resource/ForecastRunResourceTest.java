@@ -90,7 +90,7 @@ class ForecastRunResourceTest {
         when(forecastRunRepository.findRuns("generation", 25)).thenReturn(List.of(
                 new ForecastRunSummary(
                         "run-1",
-                        "openstef-barebones",
+                        "openstef-default-xgboost",
                         "generation",
                         Instant.parse("2026-01-01T00:00:00Z"),
                         Instant.parse("2025-11-01T00:00:00Z"),
@@ -100,7 +100,7 @@ class ForecastRunResourceTest {
                         "PT15M",
                         "PT36H",
                         "openstef-xgboost",
-                        "app/reports/forecast-runs/openstef-barebones-report.md"
+                        "app/reports/forecast-runs/openstef-default-xgboost-report.md"
                 )
         ));
 
@@ -111,7 +111,7 @@ class ForecastRunResourceTest {
                 .then()
                 .statusCode(200)
                 .body("[0].runId", equalTo("run-1"))
-                .body("[0].model", equalTo("openstef-barebones"))
+                .body("[0].model", equalTo("openstef-default-xgboost"))
                 .body("[0].target", equalTo("generation"))
                 .body("[0].forecastStart", equalTo("2025-12-01T00:00:00Z"));
     }

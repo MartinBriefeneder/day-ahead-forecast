@@ -12,7 +12,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 python3 main.py
-python3 barebones_openstef.py --target generation
+python3 default_openstef_xgboost.py --target generation
 python3 tuned_openstef.py --target generation
 python3 custom_openstef.py --target generation
 python3 compare_forecasts.py

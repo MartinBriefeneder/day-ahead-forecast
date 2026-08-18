@@ -5,6 +5,14 @@ import pandas as pd
 import requests
 
 
+def _backend_connection_error(base_url: str) -> ConnectionError:
+    return ConnectionError(
+        f"Could not connect to the forecast backend at {base_url}. "
+        "Start it from app/ with ./run-server.sh or ./run-dev.sh, "
+        "or pass --base-url if the backend uses a different host or port."
+    )
+
+
 def fetch_forecast_dataframe(
     base_url: str = "http://localhost:8080",
     target: str = "consumption",
@@ -19,11 +27,14 @@ def fetch_forecast_dataframe(
 ) -> pd.DataFrame:
     if target not in {"consumption", "generation"}:
         raise ValueError("target must be 'consumption' or 'generation'")
-    response = requests.get(
-        f"{base_url}/api/forecast-datasets",
-        params={"target": target, "from": start, "to": end},
-        timeout=timeout_seconds,
-    )
+    try:
+        response = requests.get(
+            f"{base_url}/api/forecast-datasets",
+            params={"target": target, "from": start, "to": end},
+            timeout=timeout_seconds,
+        )
+    except requests.ConnectionError as exception:
+        raise _backend_connection_error(base_url) from exception
     response.raise_for_status()
 
     payload = response.json()
@@ -89,11 +100,14 @@ def save_forecast_run(
     base_url: str = "http://localhost:8080",
     timeout_seconds: int = 30,
 ) -> dict:
-    response = requests.post(
-        f"{base_url}/api/forecast-runs",
-        json=payload,
-        timeout=timeout_seconds,
-    )
+    try:
+        response = requests.post(
+            f"{base_url}/api/forecast-runs",
+            json=payload,
+            timeout=timeout_seconds,
+        )
+    except requests.ConnectionError as exception:
+        raise _backend_connection_error(base_url) from exception
     if not response.ok:
         raise requests.HTTPError(
             f"{response.status_code} Error saving forecast run: {response.text}",

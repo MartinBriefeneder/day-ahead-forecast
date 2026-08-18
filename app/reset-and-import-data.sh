@@ -6,9 +6,21 @@ cd "$SCRIPT_DIR"
 
 INFLUX_DATABASE="energy"
 INFLUX_WAIT_SECONDS="${INFLUX_WAIT_SECONDS:-60}"
+ENERGY_IMPORT_BUILD="${ENERGY_IMPORT_BUILD:-auto}"
+ENERGY_IMPORT_WRITE_BATCH_SIZE="${ENERGY_IMPORT_WRITE_BATCH_SIZE:-50000}"
+ENERGY_IMPORT_GZIP_THRESHOLD_BYTES="${ENERGY_IMPORT_GZIP_THRESHOLD_BYTES:-1048576}"
 DEFAULT_IMPORT_DIR="./quarkus/data/csv_Archiv"
 IMPORT_DIR_INPUT="${1:-$DEFAULT_IMPORT_DIR}"
-export INFLUXDB_TOKEN=apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg
+DEFAULT_INFLUXDB_TOKEN="apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg"
+
+if [ -f ./.env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
+: "${INFLUXDB_TOKEN:=$DEFAULT_INFLUXDB_TOKEN}"
+export INFLUXDB_TOKEN
 
 if [ "${1:-}" = "--help" ]; then
   printf 'Usage: %s [csv-directory]\n' "$0"
@@ -34,6 +46,25 @@ fi
 
 IMPORT_DIR=$(realpath "$IMPORT_DIR_INPUT")
 
+should_build_backend() {
+  case "$ENERGY_IMPORT_BUILD" in
+    1|true|yes|always)
+      return 0
+      ;;
+    0|false|no|never|skip)
+      return 1
+      ;;
+    auto)
+      ! docker image inspect day-ahead-forecast-backend >/dev/null 2>&1
+      return
+      ;;
+    *)
+      printf 'Invalid ENERGY_IMPORT_BUILD value: %s. Use auto, 1, or 0.\n' "$ENERGY_IMPORT_BUILD" >&2
+      exit 1
+      ;;
+  esac
+}
+
 docker compose --profile server stop backend >/dev/null 2>&1 || true
 
 printf 'Starting InfluxDB...\n'
@@ -46,8 +77,10 @@ printf 'Recreating database %s...\n' "$INFLUX_DATABASE"
 docker compose exec -T influxdb influxdb3 delete database --token "$INFLUXDB_TOKEN" "$INFLUX_DATABASE" --hard-delete now --yes >/dev/null 2>&1 || true
 docker compose exec -T influxdb influxdb3 create database --token "$INFLUXDB_TOKEN" "$INFLUX_DATABASE"
 
-printf 'Building backend image...\n'
-docker compose --profile server build backend
+if should_build_backend; then
+  printf 'Building backend image...\n'
+  docker compose --profile server build backend
+fi
 
 printf 'Importing CSV files from %s\n' "$IMPORT_DIR"
 docker compose --profile server run --rm --no-deps \
@@ -58,5 +91,7 @@ docker compose --profile server run --rm --no-deps \
   -Dquarkus.http.port=0 \
   -Denergy.influx.token="$INFLUXDB_TOKEN" \
   -Denergy.influx.database="$INFLUX_DATABASE" \
+  -Denergy.influx.write-batch-size="$ENERGY_IMPORT_WRITE_BATCH_SIZE" \
+  -Denergy.influx.gzip-threshold-bytes="$ENERGY_IMPORT_GZIP_THRESHOLD_BYTES" \
   -Denergy.import.command.directory=/import-data \
   -jar quarkus-run.jar

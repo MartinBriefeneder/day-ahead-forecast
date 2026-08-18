@@ -14,7 +14,7 @@ TRAIN_START = datetime(2025, 6, 1, tzinfo=timezone.utc)
 TRAIN_DAYS = 90
 DEFAULT_FORECAST_WEEKS = 1
 MAX_FORECAST_WEEKS = 4
-MODELS = ("historical-average", "weekly-persistence")
+MODELS = ("weekly-persistence",)
 OUTPUT_DIR = (Path(__file__).resolve().parent / "../reports/forecast-runs").resolve()
 MODEL_FAMILY = "simple-benchmark"
 
@@ -527,9 +527,7 @@ def main(argv: list[str] | None = None) -> None:
     generated_at = datetime.now(timezone.utc)
     payloads = []
     for model in MODELS:
-        if model == "historical-average":
-            forecast = historical_average_forecast(train, forecast_index)
-        elif model == "weekly-persistence":
+        if model == "weekly-persistence":
             forecast = weekly_persistence_forecast(actual, forecast_index)
         else:
             raise ValueError(f"Unknown model: {model}")

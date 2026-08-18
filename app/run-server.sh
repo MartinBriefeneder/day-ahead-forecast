@@ -5,7 +5,16 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
 INFLUX_DATABASE="energy"
-export INFLUXDB_TOKEN=apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg
+DEFAULT_INFLUXDB_TOKEN="apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg"
+
+if [ -f ./.env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
+: "${INFLUXDB_TOKEN:=$DEFAULT_INFLUXDB_TOKEN}"
+export INFLUXDB_TOKEN
 
 mkdir -p ./influxdb-explorer/config
 cat > ./influxdb-explorer/config/config.json <<EOF
@@ -17,7 +26,10 @@ cat > ./influxdb-explorer/config/config.json <<EOF
 }
 EOF
 
-docker compose --profile server up -d --build
+printf 'Building backend image...\n'
+docker build -t day-ahead-forecast-backend ./quarkus
+
+docker compose --profile server up -d
 
 printf 'Backend: http://localhost:8080\n'
 printf 'Grafana: http://localhost:3000\n'

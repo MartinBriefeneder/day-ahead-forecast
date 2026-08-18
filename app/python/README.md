@@ -4,7 +4,7 @@ This directory contains Python forecast runners.
 
 The runners read historical energy data from the Quarkus backend.
 
-Some runners add observed historical weather features from the workbook in `data/raw/`.
+Some runners add observed historical weather features from the workbook in `app/data/raw/`.
 
 Run commands from `app/python` except when a command shows another directory.
 
@@ -39,7 +39,7 @@ The runner supports these useful options:
 - `--forecast-start 2025-12-01T00:00:00Z`
 - `--forecast-weeks 2`
 
-This runner tests energy-only benchmark models.
+This runner tests the energy-only `weekly-persistence` benchmark model.
 
 When `--forecast-start` is set, the training window defaults to the previous `--train-days`. This keeps the InfluxDB query narrow.
 
@@ -57,16 +57,16 @@ The runner writes this file under `app/reports/forecast-runs/`:
 
 The dashboard contains quarter-hour forecast values and daily and weekly expected-energy totals.
 
-## Run The Barebones OpenSTEF Forecast
+## Run The Default OpenSTEF XGBoost Forecast
 
 Start the local services and Quarkus first. Then run:
 
 ```bash
 source .venv/bin/activate
-python barebones_openstef.py --target generation
+python default_openstef_xgboost.py --target generation
 ```
 
-The barebones runner fetches energy data from the backend.
+The default OpenSTEF XGBoost runner fetches energy data from the backend.
 
 It joins local observed historical weather features, trains one default OpenSTEF XGBoost workflow, creates a comparison plot, and sends the forecast run to the backend.
 
@@ -77,56 +77,16 @@ Useful options:
 - `--train-start 2025-06-11T00:00:00Z`
 - `--train-days 90`
 - `--forecast-days 7`
-- `--persist-model`
-- `--model-root ../models/forecast-models`
 
 Example:
 
 ```bash
-python barebones_openstef.py --target consumption --train-days 60 --forecast-days 3
+python default_openstef_xgboost.py --target consumption --train-days 60 --forecast-days 3
 ```
 
 The runner writes this file under `app/reports/forecast-runs/`:
 
-- `openstef-barebones-comparison.html`
-
-Use `--persist-model` when the trained barebones OpenSTEF model should also be written as a local reusable artifact. This writes the same artifact shape as `train_persisted_model.py`.
-
-## Train And Reuse A Persisted Model
-
-Start the local services and Quarkus first. Then train and persist a barebones OpenSTEF model:
-
-```bash
-../train-persisted-model.sh --target generation --train-days 90
-```
-
-The command writes a local artifact directory under:
-
-```text
-app/models/forecast-models/
-```
-
-Each artifact directory contains:
-
-- `model.pkl`
-- `metadata.json`
-- `feature-schema.json`
-
-Use the printed artifact path to forecast later without retraining:
-
-```bash
-../forecast-from-model.sh <printed-artifact-path> --forecast-start 2025-09-09T00:00:00Z --forecast-days 1
-```
-
-The forecast command loads only local trusted artifacts. It validates the required input columns before prediction, writes a comparison plot, and saves the forecast run to the backend. The saved run uses the existing `reportPath` field to reference the model artifact path.
-
-For a true future forecast, use a `--forecast-start` at or after the artifact `trainEnd` from `metadata.json`. For inspection only, you can forecast inside the model's training window:
-
-```bash
-../forecast-from-model.sh <printed-artifact-path> --forecast-start 2025-09-09T00:00:00Z --forecast-days 1 --allow-in-sample-forecast
-```
-
-In-sample forecasts can be useful for checking that the saved model runs. Do not use them as unbiased backtest results because the model was trained with data from the forecast period.
+- `openstef-default-xgboost-comparison.html`
 
 ## Run The Tuned OpenSTEF Forecast
 
@@ -190,20 +150,10 @@ The runner writes this file under `app/reports/forecast-runs/`:
 Historical weather features use this local workbook of observed actual weather values:
 
 ```text
-data/raw/Historical data Wetter(1).xlsx
+app/data/raw/Historical data Wetter(1).xlsx
 ```
 
-The weekly weather forecast runner calls the Gridoo Weather API for future forecast weather values. The project uses location id `4` for Kirchdorf an der Krems.
-
-Generate the weather inspection report:
-
-```bash
-cd app/python
-source .venv/bin/activate
-python weather_features.py inspect --output ../reports/weather-inspection-report.md
-```
-
-The command writes Markdown and JSON reports.
+No active forecast runner currently calls the Gridoo Weather API. The Gridoo field mapping remains documented for a later OpenSTEF future-forecast workflow.
 
 The historical loader maps source columns to names that match OpenSTEF:
 

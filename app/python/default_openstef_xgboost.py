@@ -27,10 +27,9 @@ from forecast_runner import (
     run_id_for_model,
 )
 from main import compute_metrics
-from persisted_model import DEFAULT_MODEL_ROOT, artifact_directory, openstef_feature_schema, openstef_metadata, write_artifact
 from weather_features import DEFAULT_WEATHER_PATH
 
-MODEL_NAME = "openstef-barebones"
+MODEL_NAME = "openstef-default-xgboost"
 MODEL_FAMILY = "openstef-xgboost"
 
 
@@ -38,13 +37,13 @@ def run_id(target: str, forecast_start: datetime) -> str:
     return run_id_for_model(target, MODEL_NAME, forecast_start)
 
 
-def create_barebones_workflow(target: str):
+def create_default_openstef_xgboost_workflow(target: str):
     from openstef_core.types import LeadTime, Q
     from openstef_models.models.forecasting.xgboost_forecaster import XGBoostHyperParams
     from openstef_models.presets import ForecastingWorkflowConfig, create_forecasting_workflow
 
     config = ForecastingWorkflowConfig(
-        model_id=f"{target}_barebones_xgboost",
+        model_id=f"{target}_default_openstef_xgboost",
         model="xgboost",
         horizons=[LeadTime.from_string(HORIZON)],
         quantiles=[Q(0.5), Q(0.1), Q(0.9)],
@@ -138,7 +137,7 @@ def write_run_files(output_dir: Path, payload: dict[str, Any], metadata: dict[st
 def write_comparison_plot(output_dir: Path, payload: dict[str, Any], metadata: dict[str, Any]) -> Path:
     from plotly import graph_objects as go
 
-    plot_path = output_dir / "openstef-barebones-comparison.html"
+    plot_path = output_dir / "openstef-default-xgboost-comparison.html"
     target_label = str(metadata["target"]).capitalize()
     points = payload["points"]
 
@@ -164,7 +163,7 @@ def write_comparison_plot(output_dir: Path, payload: dict[str, Any], metadata: d
     )
 
     fig.update_layout(
-        title=f"OpenSTEF {target_label} Barebones Forecast vs Actual",
+        title=f"OpenSTEF {target_label} Default XGBoost Forecast vs Actual",
         xaxis_title="Time (UTC)",
         yaxis_title=f"{target_label} energy (kWh per 15-minute interval)",
         hovermode="x unified",
@@ -188,38 +187,8 @@ def save_payload(payload: dict[str, Any], *, base_url: str) -> None:
     print(f"Saved {response['runId']} to backend ({point_count} points, {metric_count} metrics)")
 
 
-def persist_workflow(
-    *,
-    workflow,
-    config,
-    model_root: str | Path,
-    target: str,
-    train_start: datetime,
-    train_end: datetime,
-    created_at: datetime,
-    weather_path: str,
-) -> Path:
-    artifact_dir = artifact_directory(model_root, target=target, model=MODEL_NAME, created_at=created_at)
-    schema = openstef_feature_schema(target=target, weather_features=WEATHER_FEATURES, sample_interval=SAMPLE_INTERVAL)
-    metadata = openstef_metadata(
-        target=target,
-        model=MODEL_NAME,
-        model_family=MODEL_FAMILY,
-        train_start=train_start,
-        train_end=train_end,
-        created_at=created_at,
-        weather_path=weather_path,
-        artifact_dir=artifact_dir,
-        sample_interval=SAMPLE_INTERVAL,
-        horizon=HORIZON,
-        xgboost_hyperparameters=config.xgboost_hyperparams.model_dump(mode="json"),
-    )
-    write_artifact(artifact_dir, model=workflow, metadata=metadata, feature_schema=schema)
-    return artifact_dir
-
-
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run a barebones OpenSTEF XGBoost forecast.")
+    parser = argparse.ArgumentParser(description="Run a default OpenSTEF XGBoost forecast.")
     parser.add_argument("--base-url", default=BASE_URL)
     parser.add_argument("--target", default=DEFAULT_TARGET, choices=("generation", "consumption"))
     parser.add_argument("--train-start", default=DEFAULT_TRAIN_START)
@@ -227,8 +196,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--forecast-days", type=int, default=DEFAULT_FORECAST_DAYS)
     parser.add_argument("--weather-path", default=str(DEFAULT_WEATHER_PATH))
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
-    parser.add_argument("--persist-model", action="store_true", help="Write the trained model as a local artifact.")
-    parser.add_argument("--model-root", default=str(DEFAULT_MODEL_ROOT))
     return parser
 
 
@@ -262,7 +229,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Training rows: {len(train_dataset.data):,}")
     print(f"Prediction rows: {len(predict_dataset.data):,}")
 
-    workflow, config = create_barebones_workflow(args.target)
+    workflow, config = create_default_openstef_xgboost_workflow(args.target)
     workflow.fit(train_dataset)
 
     generated_at = datetime.now(timezone.utc)
@@ -295,21 +262,9 @@ def main(argv: list[str] | None = None) -> None:
     }
 
     plot_path = write_run_files(Path(args.output_dir), payload, metadata)
-    if args.persist_model:
-        artifact_dir = persist_workflow(
-            workflow=workflow,
-            config=config,
-            model_root=args.model_root,
-            target=args.target,
-            train_start=train_start,
-            train_end=train_end,
-            created_at=generated_at,
-            weather_path=args.weather_path,
-        )
-        print(f"Wrote model artifact to {artifact_dir}")
     save_payload(payload, base_url=args.base_url)
 
-    print(f"Wrote barebones comparison plot to {plot_path}")
+    print(f"Wrote default OpenSTEF XGBoost comparison plot to {plot_path}")
     print(f"{MODEL_NAME}: MAE={metrics['mae_kwh']:.4f} kWh, RMSE={metrics['rmse_kwh']:.4f} kWh")
 
 
