@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from forecast_dataset_api import fetch_forecast_dataframe
+from forecast_dataset_api import fetch_forecast_dataframe, save_forecast_run
 
 BASE_URL = "http://localhost:8080"
 TARGET = "consumption"
@@ -167,6 +167,17 @@ def report_payload(
                 "errorKwh": none_if_nan(row.error_kwh),
             }
             for index, row in comparison.iterrows()
+        ],
+    }
+
+
+def backend_payload(payload: dict) -> dict:
+    return {
+        **payload,
+        "metrics": [
+            {"name": name, "value": float(value)}
+            for name, value in payload["metrics"].items()
+            if isinstance(value, int | float) and pd.notna(value)
         ],
     }
 
@@ -502,6 +513,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-days", type=int, default=TRAIN_DAYS)
     parser.add_argument("--forecast-start", help="UTC ISO-8601 timestamp. Defaults to train-start plus train-days.")
     parser.add_argument("--forecast-weeks", type=int, default=DEFAULT_FORECAST_WEEKS)
+    parser.add_argument("--save", action="store_true", help="Persist the forecast run to the backend for later comparison.")
     return parser
 
 
@@ -552,7 +564,14 @@ def main(argv: list[str] | None = None) -> None:
     dashboard_path = write_reports(output_dir, payloads, actual)
     if dashboard_path is not None:
         print(f"Wrote forecast dashboard to {dashboard_path}")
+        for payload in payloads:
+            payload["reportPath"] = str(dashboard_path)
     for payload in payloads:
+        if args.save:
+            response = save_forecast_run(backend_payload(payload), base_url=args.base_url)
+            point_count = response.get("forecastPoints", response.get("pointCount", len(payload["points"])))
+            metric_count = response.get("metrics", response.get("metricCount", len(payload["metrics"])))
+            print(f"Saved {response['runId']} to backend ({point_count} points, {metric_count} metrics)")
         metrics = payload["metrics"]
         if metrics.get("aligned_intervals", 0):
             print(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -136,21 +137,34 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
     fig.write_html(output_path, include_plotlyjs=True)
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Compare saved forecast runs for one target and forecast window.")
+    parser.add_argument("--base-url", default=BASE_URL)
+    parser.add_argument("--target", default=TARGET, choices=("generation", "consumption"))
+    parser.add_argument("--forecast-start")
+    parser.add_argument("--forecast-end")
+    parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
+    parser.add_argument("--run-limit", type=int, default=RUN_LIMIT)
+    parser.add_argument("--point-limit", type=int, default=POINT_LIMIT)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
     summaries = select_summaries(
-        fetch_run_summaries(BASE_URL, target=TARGET, limit=RUN_LIMIT, timeout_seconds=TIMEOUT_SECONDS),
-        target=TARGET,
-        forecast_start=None,
-        forecast_end=None,
+        fetch_run_summaries(args.base_url, target=args.target, limit=args.run_limit, timeout_seconds=TIMEOUT_SECONDS),
+        target=args.target,
+        forecast_start=args.forecast_start,
+        forecast_end=args.forecast_end,
     )
     if not summaries:
         raise ValueError("No matching saved forecast runs found")
 
-    runs = attach_comparison_points(BASE_URL, summaries, point_limit=POINT_LIMIT, timeout_seconds=TIMEOUT_SECONDS)
+    runs = attach_comparison_points(args.base_url, summaries, point_limit=args.point_limit, timeout_seconds=TIMEOUT_SECONDS)
     if not runs:
         raise ValueError("Matching saved forecast runs have no comparison points")
 
-    output_path = OUTPUT_DIR / DEFAULT_OUTPUT
+    output_path = Path(args.output_dir) / f"{args.target}-{DEFAULT_OUTPUT}"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_comparison_figure(output_path, runs)
     print(f"Wrote {output_path} with {len(runs)} forecast runs")

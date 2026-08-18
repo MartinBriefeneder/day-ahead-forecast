@@ -45,10 +45,12 @@ When `--forecast-start` is set, the training window defaults to the previous `--
 
 It writes only the local HTML report.
 
+Add `--save` to persist the benchmark forecast run to the backend. This is useful for future forecasts, because actual values can be imported later and compared retrospectively by `runId`.
+
 Example for a two-week expected consumption forecast:
 
 ```bash
-python main.py --target consumption --forecast-start 2025-12-01T00:00:00Z --forecast-weeks 2
+python main.py --target consumption --forecast-start 2025-12-01T00:00:00Z --forecast-weeks 2 --save
 ```
 
 The runner writes this file under `app/reports/forecast-runs/`:
@@ -200,3 +202,14 @@ cd app/python
 source .venv/bin/activate
 python -m unittest discover -s tests
 ```
+
+## Compare Saved Forecasts
+
+After forecast runs are saved, create a target-specific comparison report:
+
+```bash
+python compare_forecasts.py --target generation
+python compare_forecasts.py --target consumption
+```
+
+The backend comparison endpoint also supports retrospective comparison. If a saved future run has no `actualKwh` values, the endpoint looks up actual `energy_values` for the same target and forecast window after those values are imported.

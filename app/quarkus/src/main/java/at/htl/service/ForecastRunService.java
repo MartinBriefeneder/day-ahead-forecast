@@ -1,7 +1,10 @@
 package at.htl.service;
 
+import at.htl.model.ForecastComparisonDiagnostics;
 import at.htl.model.ForecastComparisonResponse;
+import at.htl.model.ForecastComparisonPoint;
 import at.htl.model.ForecastDatasetTarget;
+import at.htl.model.ForecastDatasetValue;
 import at.htl.model.ForecastMetric;
 import at.htl.model.ForecastPoint;
 import at.htl.model.ForecastRunRequest;
@@ -13,7 +16,10 @@ import jakarta.inject.Inject;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 public class ForecastRunService {
@@ -33,7 +39,74 @@ public class ForecastRunService {
         if (runId == null || runId.isBlank()) {
             throw new IllegalArgumentException("runId must be provided");
         }
-        return new ForecastComparisonResponse(runId, forecastRunRepository.findComparison(runId, limit));
+        List<ForecastComparisonPoint> forecastPoints = forecastRunRepository.findComparison(runId, limit);
+        if (forecastPoints.isEmpty()) {
+            return response(runId, forecastPoints, 0);
+        }
+
+        ForecastRunSummary summary = forecastRunRepository.findRun(runId).orElse(null);
+        if (summary == null) {
+            return response(runId, forecastPoints, 0);
+        }
+
+        ForecastDatasetTarget target = ForecastDatasetTarget.parse(summary.target());
+        List<ForecastDatasetValue> actualValues = forecastRunRepository.findActualValues(
+                target,
+                summary.forecastStart(),
+                summary.forecastEnd(),
+                limit
+        );
+        Map<Instant, Double> actualByTimestamp = new LinkedHashMap<>();
+        for (ForecastDatasetValue actualValue : actualValues) {
+            actualByTimestamp.put(actualValue.timestamp(), actualValue.value());
+        }
+
+        List<ForecastComparisonPoint> aligned = new ArrayList<>(forecastPoints.size());
+        for (ForecastComparisonPoint point : forecastPoints) {
+            Double actualKwh = point.actualKwh() != null ? point.actualKwh() : actualByTimestamp.get(point.timestamp());
+            Double errorKwh = actualKwh == null ? null : point.forecastKwh() - actualKwh;
+            aligned.add(new ForecastComparisonPoint(point.timestamp(), point.forecastKwh(), actualKwh, errorKwh));
+        }
+        return response(runId, aligned, actualValues.size());
+    }
+
+    private ForecastComparisonResponse response(String runId, List<ForecastComparisonPoint> points, int actualPointCount) {
+        int alignedPointCount = 0;
+        double absError = 0.0;
+        double squaredError = 0.0;
+        double error = 0.0;
+        double totalForecast = 0.0;
+        double totalActual = 0.0;
+        for (ForecastComparisonPoint point : points) {
+            totalForecast += point.forecastKwh();
+            if (point.actualKwh() != null && point.errorKwh() != null) {
+                alignedPointCount++;
+                absError += Math.abs(point.errorKwh());
+                squaredError += point.errorKwh() * point.errorKwh();
+                error += point.errorKwh();
+                totalActual += point.actualKwh();
+            }
+        }
+        List<ForecastMetric> metrics = new ArrayList<>();
+        metrics.add(new ForecastMetric("forecast_intervals", points.size()));
+        metrics.add(new ForecastMetric("actual_intervals", actualPointCount));
+        metrics.add(new ForecastMetric("aligned_intervals", alignedPointCount));
+        metrics.add(new ForecastMetric("missing_actual_intervals", points.size() - alignedPointCount));
+        metrics.add(new ForecastMetric("total_forecast_kwh", totalForecast));
+        if (alignedPointCount > 0) {
+            metrics.add(new ForecastMetric("mae_kwh", absError / alignedPointCount));
+            metrics.add(new ForecastMetric("rmse_kwh", Math.sqrt(squaredError / alignedPointCount)));
+            metrics.add(new ForecastMetric("bias_kwh", error / alignedPointCount));
+            metrics.add(new ForecastMetric("total_actual_kwh", totalActual));
+            metrics.add(new ForecastMetric("total_energy_error_kwh", error));
+        }
+        ForecastComparisonDiagnostics diagnostics = new ForecastComparisonDiagnostics(
+                points.size(),
+                actualPointCount,
+                alignedPointCount,
+                points.size() - alignedPointCount
+        );
+        return new ForecastComparisonResponse(runId, points, diagnostics, metrics);
     }
 
     public List<ForecastRunSummary> listRuns(String target, int limit) throws Exception {

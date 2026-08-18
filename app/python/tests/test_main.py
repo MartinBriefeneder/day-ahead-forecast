@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
-from main import build_parser, resolve_windows, write_reports
+from main import backend_payload, build_parser, resolve_windows, write_reports
 
 
 class MainBacktestReportTest(unittest.TestCase):
@@ -57,6 +57,22 @@ class MainBacktestReportTest(unittest.TestCase):
     def test_parser_does_not_accept_no_save(self):
         with self.assertRaises(SystemExit):
             build_parser().parse_args(["--no-save"])
+
+    def test_parser_accepts_save(self):
+        args = build_parser().parse_args(["--save"])
+
+        self.assertEqual(True, args.save)
+
+    def test_backend_payload_converts_metric_dict_to_items(self):
+        payload = {
+            "runId": "run-1",
+            "metrics": {"mae_kwh": 0.5, "note": "ignored"},
+            "points": [],
+        }
+
+        result = backend_payload(payload)
+
+        self.assertEqual([{"name": "mae_kwh", "value": 0.5}], result["metrics"])
 
     def test_forecast_start_defaults_training_window_to_previous_train_days(self):
         args = build_parser().parse_args([

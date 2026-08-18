@@ -1,6 +1,7 @@
 package at.htl.repository;
 
 import at.htl.model.ForecastComparisonPoint;
+import at.htl.model.ForecastDatasetTarget;
 import at.htl.model.ForecastMetric;
 import at.htl.model.ForecastPoint;
 import at.htl.model.ForecastRunRequest;
@@ -75,6 +76,31 @@ class ForecastRunRepositoryTest {
         String sql = repository.buildRunsSql("generation", 25, false);
 
         assertEquals("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, sample_interval, horizon, model_family FROM \"forecast_run_metadata\" WHERE target = 'generation' ORDER BY time DESC LIMIT 25", sql);
+    }
+
+    @Test
+    void buildRunSqlFiltersByRunId() throws Exception {
+        ForecastRunRepository repository = new ForecastRunRepository();
+        setField(repository, "metadataMeasurement", "forecast_run_metadata");
+
+        String sql = repository.buildRunSql("run'1", true);
+
+        assertEquals("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, sample_interval, horizon, model_family, report_path FROM \"forecast_run_metadata\" WHERE run_id = 'run''1' ORDER BY time DESC LIMIT 1", sql);
+    }
+
+    @Test
+    void buildActualValuesSqlUsesTargetDirectionAndTotalCategory() throws Exception {
+        ForecastRunRepository repository = new ForecastRunRepository();
+        setField(repository, "actualMeasurement", "energy_values");
+
+        String sql = repository.buildActualValuesSql(
+                ForecastDatasetTarget.GENERATION,
+                Instant.parse("2025-12-01T00:00:00Z"),
+                Instant.parse("2025-12-02T00:00:00Z"),
+                96
+        );
+
+        assertEquals("SELECT time, SUM(value_kwh) AS value FROM \"energy_values\" WHERE direction = 'DELIVERY' AND category = 'total' AND time >= '2025-12-01T00:00:00Z' AND time < '2025-12-02T00:00:00Z' GROUP BY time ORDER BY time ASC LIMIT 96", sql);
     }
 
     @Test

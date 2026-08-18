@@ -1,6 +1,8 @@
 package at.htl.repository;
 
 import at.htl.model.ForecastComparisonPoint;
+import at.htl.model.ForecastDatasetTarget;
+import at.htl.model.ForecastDatasetValue;
 import at.htl.model.ForecastMetric;
 import at.htl.model.ForecastPoint;
 import at.htl.model.ForecastRunRequest;
@@ -37,6 +39,9 @@ public class ForecastRunRepository {
     @ConfigProperty(name = "energy.influx.forecast-run-metadata-measurement", defaultValue = "forecast_run_metadata")
     String metadataMeasurement;
 
+    @ConfigProperty(name = "energy.influx.measurement", defaultValue = "energy_values")
+    String actualMeasurement;
+
     @ConfigProperty(name = "energy.influx.token")
     Optional<String> token;
 
@@ -67,6 +72,30 @@ public class ForecastRunRepository {
         try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database);
              Stream<Object[]> stream = client.query(sql)) {
             return stream.map(this::toComparisonPoint).toList();
+        }
+    }
+
+    public Optional<ForecastRunSummary> findRun(String runId) throws Exception {
+        String sql = buildRunSql(runId, true);
+        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database)) {
+            try (Stream<Object[]> stream = client.query(sql)) {
+                return stream.map(this::toRunSummary).findFirst();
+            } catch (RuntimeException exception) {
+                if (isMissingColumnException(exception, "report_path")) {
+                    try (Stream<Object[]> stream = client.query(buildRunSql(runId, false))) {
+                        return stream.map(this::toRunSummary).findFirst();
+                    }
+                }
+                throw exception;
+            }
+        }
+    }
+
+    public List<ForecastDatasetValue> findActualValues(ForecastDatasetTarget target, Instant from, Instant to, int limit) throws Exception {
+        String sql = buildActualValuesSql(target, from, to, limit);
+        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database);
+             Stream<Object[]> stream = client.query(sql)) {
+            return stream.map(this::toForecastDatasetValue).toList();
         }
     }
 
@@ -137,6 +166,44 @@ public class ForecastRunRepository {
         return sql.append(" ORDER BY time DESC LIMIT ").append(limit).toString();
     }
 
+    String buildRunSql(String runId, boolean includeReportPath) {
+        if (runId == null || runId.isBlank()) {
+            throw new IllegalArgumentException("runId must be provided");
+        }
+        StringBuilder sql = new StringBuilder()
+                .append("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, ")
+                .append("sample_interval, horizon, model_family");
+        if (includeReportPath) {
+            sql.append(", report_path");
+        }
+        return sql.append(" FROM ")
+                .append(quoteIdentifier(metadataMeasurement))
+                .append(" WHERE run_id = '").append(escapeSqlLiteral(runId)).append("'")
+                .append(" ORDER BY time DESC LIMIT 1")
+                .toString();
+    }
+
+    String buildActualValuesSql(ForecastDatasetTarget target, Instant from, Instant to, int limit) {
+        if (target == null) {
+            throw new IllegalArgumentException("target must be provided");
+        }
+        if (from == null || to == null || !to.isAfter(from)) {
+            throw new IllegalArgumentException("from and to must define a non-empty range");
+        }
+        if (limit <= 0 || limit > 100_000) {
+            throw new IllegalArgumentException("limit must be between 1 and 100000");
+        }
+        return new StringBuilder()
+                .append("SELECT time, SUM(value_kwh) AS value FROM ")
+                .append(quoteIdentifier(actualMeasurement))
+                .append(" WHERE direction = '").append(target.direction().name()).append("'")
+                .append(" AND category = 'total'")
+                .append(" AND time >= '").append(from).append("'")
+                .append(" AND time < '").append(to).append("'")
+                .append(" GROUP BY time ORDER BY time ASC LIMIT ").append(limit)
+                .toString();
+    }
+
     ForecastRunSummary toRunSummary(Object[] row) {
         return new ForecastRunSummary(
                 String.valueOf(row[0]),
@@ -152,6 +219,10 @@ public class ForecastRunRepository {
                 stringOrNull(row[10]),
                 row.length > 11 ? stringOrNull(row[11]) : null
         );
+    }
+
+    ForecastDatasetValue toForecastDatasetValue(Object[] row) {
+        return new ForecastDatasetValue(parseTime(row[0]), ((Number) row[1]).doubleValue());
     }
 
     boolean isMissingColumnException(RuntimeException exception, String column) {

@@ -298,6 +298,7 @@ def main(argv: list[str] | None = None) -> None:
     }
 
     plot_path = write_run_files(Path(args.output_dir), payload, metadata)
+    payload["reportPath"] = str(plot_path)
     save_payload(payload, base_url=args.base_url)
 
     print(f"Wrote custom OpenSTEF comparison plot to {plot_path}")

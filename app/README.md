@@ -99,6 +99,8 @@ Then run all forecast experiments:
 ./run-all-forecasts.sh
 ```
 
+The script runs both `generation` and `consumption` forecasts. It saves benchmark and OpenSTEF runs to the backend, then writes comparison reports under `app/reports/forecast-runs/`.
+
 These commands create `app/python/.venv` if needed and install `app/python/requirements.txt`.
 
 Weather-based forecast code needs outbound internet access to the Gridoo Weather API.
@@ -108,6 +110,23 @@ Historical weather experiments need this local workbook:
 ```text
 app/data/raw/Historical data Wetter(1).xlsx
 ```
+
+To save an energy-only future benchmark forecast before actual values exist, run for each target:
+
+```bash
+cd python
+source .venv/bin/activate
+python main.py --target generation --forecast-start 2026-08-19T00:00:00Z --forecast-weeks 1 --save
+python main.py --target consumption --forecast-start 2026-08-19T00:00:00Z --forecast-weeks 1 --save
+```
+
+After actual values for that forecast window are imported later, compare the saved run again through the backend endpoint:
+
+```bash
+curl 'http://localhost:8080/api/forecast-runs/<run-id>/comparison?limit=10000'
+```
+
+The comparison endpoint fills missing actual values from imported `energy_values` when timestamps match.
 
 ## Useful Maintenance Commands
 

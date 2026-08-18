@@ -1,15 +1,20 @@
 package at.htl.service;
 
+import at.htl.model.ForecastComparisonResponse;
+import at.htl.model.ForecastDatasetTarget;
+import at.htl.model.ForecastDatasetValue;
 import at.htl.model.ForecastMetric;
 import at.htl.model.ForecastPoint;
 import at.htl.model.ForecastRunRequest;
 import at.htl.model.ForecastRunSaveResponse;
+import at.htl.model.ForecastRunSummary;
 import at.htl.repository.ForecastRunRepository;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -75,6 +80,44 @@ class ForecastRunServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.save(new ForecastRunRequest(valid.runId(), valid.model(), valid.target(), valid.generatedAt(), valid.trainStart(), valid.trainEnd(), valid.forecastStart(), valid.forecastEnd(), valid.sampleInterval(), "tomorrow", valid.modelFamily(), valid.reportPath(), valid.points(), valid.metrics())));
     }
 
+    @Test
+    void comparisonFillsActualValuesFromImportedEnergyData() throws Exception {
+        StubRepository repository = new StubRepository();
+        repository.comparisonPoints = List.of(
+                new at.htl.model.ForecastComparisonPoint(Instant.parse("2025-12-01T00:00:00Z"), 10.0, null, null),
+                new at.htl.model.ForecastComparisonPoint(Instant.parse("2025-12-01T00:15:00Z"), 20.0, null, null)
+        );
+        repository.summary = Optional.of(new ForecastRunSummary(
+                "run-1",
+                "weekly-persistence",
+                "generation",
+                Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2025-09-01T00:00:00Z"),
+                Instant.parse("2025-12-01T00:00:00Z"),
+                Instant.parse("2025-12-01T00:00:00Z"),
+                Instant.parse("2025-12-01T00:30:00Z"),
+                "PT15M",
+                "PT36H",
+                "simple-benchmark",
+                null
+        ));
+        repository.actualValues = List.of(
+                new ForecastDatasetValue(Instant.parse("2025-12-01T00:00:00Z"), 8.0)
+        );
+        ForecastRunService service = serviceWithRepository(repository);
+
+        ForecastComparisonResponse response = service.getComparison("run-1", 100);
+
+        assertEquals(2, response.diagnostics().forecastPointCount());
+        assertEquals(1, response.diagnostics().actualPointCount());
+        assertEquals(1, response.diagnostics().alignedPointCount());
+        assertEquals(1, response.diagnostics().missingActualCount());
+        assertEquals(8.0, response.points().get(0).actualKwh());
+        assertEquals(2.0, response.points().get(0).errorKwh());
+        assertEquals(null, response.points().get(1).actualKwh());
+        assertEquals(ForecastDatasetTarget.GENERATION, repository.actualTarget);
+    }
+
     private ForecastRunService serviceWithRepository(ForecastRunRepository repository) throws Exception {
         ForecastRunService service = new ForecastRunService();
         Field field = ForecastRunService.class.getDeclaredField("forecastRunRepository");
@@ -110,10 +153,30 @@ class ForecastRunServiceTest {
 
     private static class StubRepository extends ForecastRunRepository {
         private ForecastRunRequest savedRequest;
+        private List<at.htl.model.ForecastComparisonPoint> comparisonPoints = List.of();
+        private Optional<ForecastRunSummary> summary = Optional.empty();
+        private List<ForecastDatasetValue> actualValues = List.of();
+        private ForecastDatasetTarget actualTarget;
 
         @Override
         public void save(ForecastRunRequest request) {
             savedRequest = request;
+        }
+
+        @Override
+        public List<at.htl.model.ForecastComparisonPoint> findComparison(String runId, int limit) {
+            return comparisonPoints;
+        }
+
+        @Override
+        public Optional<ForecastRunSummary> findRun(String runId) {
+            return summary;
+        }
+
+        @Override
+        public List<ForecastDatasetValue> findActualValues(ForecastDatasetTarget target, Instant from, Instant to, int limit) {
+            actualTarget = target;
+            return actualValues;
         }
     }
 }

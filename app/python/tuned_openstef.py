@@ -335,6 +335,8 @@ def main(argv: list[str] | None = None) -> None:
 
     payloads = [default_payload, tuned_payload]
     plot_path = write_run_files(Path(args.output_dir), payloads, metadata)
+    for payload in payloads:
+        payload["reportPath"] = str(plot_path)
     save_payloads(payloads, base_url=args.base_url)
 
     print(f"Wrote tuning comparison plot to {plot_path}")
