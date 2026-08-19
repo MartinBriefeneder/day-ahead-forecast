@@ -2,13 +2,21 @@ name: day-ahead-forecast
 services:
   influxdb:
     container_name: influxdb
-    image: influxdb:3-core
+    image: influxdb:3.10.1-core
     user: root
     ports:
       - 8181:8181
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running docker compose up}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - influxdb3 query --host http://localhost:8181 --token "$$INFLUXDB_TOKEN" --database _internal "SHOW TABLES" >/dev/null
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
     command:
       - /bin/sh
       - -c
@@ -30,25 +38,16 @@ services:
         source: influxdb3-plugins
         target: /var/lib/influxdb3/plugins
   influxdb-init:
-    image: influxdb:3-core
+    image: influxdb:3.10.1-core
     environment:
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running docker compose up}
-      INFLUX_WAIT_SECONDS: ${INFLUX_WAIT_SECONDS:-60}
     depends_on:
-      - influxdb
+      influxdb:
+        condition: service_healthy
     entrypoint:
       - /bin/sh
       - -c
       - |
-        attempts=0
-        until influxdb3 query --host http://influxdb:8181 --token "$$INFLUXDB_TOKEN" --database _internal "SHOW TABLES" >/dev/null 2>&1; do
-          attempts=$$(($$attempts + 1))
-          if [ "$$attempts" -ge "$$INFLUX_WAIT_SECONDS" ]; then
-            printf 'Timed out waiting for InfluxDB after %s seconds. Check InfluxDB logs and INFLUXDB_TOKEN.\n' "$$INFLUX_WAIT_SECONDS" >&2
-            exit 1
-          fi
-          sleep 1
-        done
         influxdb3 create database --host http://influxdb:8181 --token "$$INFLUXDB_TOKEN" energy >/dev/null 2>&1 || true
   backend:
     container_name: forecast-backend
