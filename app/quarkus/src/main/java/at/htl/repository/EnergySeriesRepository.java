@@ -4,9 +4,12 @@ import at.htl.model.DirectionType;
 import at.htl.model.EnergyCategory;
 import at.htl.model.EnergySeries;
 import at.htl.model.ForecastDatasetValue;
-import com.influxdb.v3.client.InfluxDBClient;
-import com.influxdb.v3.client.Point;
-import com.influxdb.v3.client.write.WriteOptions;
+import com.influxdb.client.InfluxDBClient;
+import com.influxdb.client.InfluxDBClientFactory;
+import com.influxdb.client.domain.WritePrecision;
+import com.influxdb.client.write.Point;
+import com.influxdb.query.FluxRecord;
+import com.influxdb.query.FluxTable;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -19,7 +22,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 @ApplicationScoped
 public class EnergySeriesRepository {
@@ -32,8 +34,11 @@ public class EnergySeriesRepository {
     @ConfigProperty(name = "energy.influx.url")
     String influxUrl;
 
-    @ConfigProperty(name = "energy.influx.database")
-    String database;
+    @ConfigProperty(name = "energy.influx.org")
+    String org;
+
+    @ConfigProperty(name = "energy.influx.bucket")
+    String bucket;
 
     @ConfigProperty(name = "energy.influx.measurement")
     String measurement;
@@ -44,9 +49,6 @@ public class EnergySeriesRepository {
     @ConfigProperty(name = "energy.influx.write-batch-size", defaultValue = "10000")
     int writeBatchSize;
 
-    @ConfigProperty(name = "energy.influx.gzip-threshold-bytes", defaultValue = "1")
-    int gzipThresholdBytes;
-
     @ConfigProperty(name = "energy.influx.forecast-dataset-query-window", defaultValue = "P1D")
     Duration forecastDatasetQueryWindow;
 
@@ -55,9 +57,8 @@ public class EnergySeriesRepository {
             return;
         }
 
-        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database)) {
+        try (InfluxDBClient client = newClient()) {
             int batchSize = resolvedWriteBatchSize();
-            WriteOptions writeOptions = writeOptions();
             List<Point> batch = new ArrayList<>(batchSize);
             for (int start = 0; start < series.size(); start += batchSize) {
                 int end = Math.min(start + batchSize, series.size());
@@ -68,15 +69,9 @@ public class EnergySeriesRepository {
                 for (int index = start; index < end; index++) {
                     batch.add(toPoint(series.get(index)));
                 }
-                client.writePoints(batch, writeOptions);
+                client.getWriteApiBlocking().writePoints(bucket, org, batch);
             }
         }
-    }
-
-    WriteOptions writeOptions() {
-        return new WriteOptions.Builder()
-                .gzipThreshold(gzipThresholdBytes)
-                .build();
     }
 
     int resolvedWriteBatchSize() {
@@ -91,52 +86,45 @@ public class EnergySeriesRepository {
             throw new IllegalArgumentException("limit must be between 1 and 10000");
         }
 
-        String sql = buildSql(meteringPoint, direction, from, to, limit);
-        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database);
-             Stream<Object[]> stream = client.query(sql)) {
-            return stream.map(this::toEnergySeries).toList();
+        String flux = buildFlux(meteringPoint, direction, from, to, limit);
+        try (InfluxDBClient client = newClient()) {
+            return queryRecords(client, flux).stream().map(this::toEnergySeries).toList();
         }
     }
 
     public List<ForecastDatasetValue> findForecastDataset(DirectionType direction, Instant from, Instant to) throws Exception {
         List<ForecastDatasetValue> values = new ArrayList<>();
-        try (InfluxDBClient client = InfluxDBClient.getInstance(influxUrl, resolvedToken().toCharArray(), database)) {
+        try (InfluxDBClient client = newClient()) {
             for (TimeWindow window : buildForecastDatasetWindows(from, to)) {
-                String sql = buildForecastDatasetSql(direction, window.from(), window.to());
-                try (Stream<Object[]> stream = client.query(sql)) {
-                    stream.map(this::toForecastDatasetValue).forEach(values::add);
-                }
+                String flux = buildForecastDatasetFlux(direction, window.from(), window.to());
+                queryRecords(client, flux).stream().map(this::toForecastDatasetValue).forEach(values::add);
             }
         }
         return values;
     }
 
-    String buildSql(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) {
-        List<String> conditions = new ArrayList<>();
+    String buildFlux(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) {
         if (meteringPoint != null && !meteringPoint.isBlank()) {
-            conditions.add("metering_point = '" + escapeSqlLiteral(meteringPoint) + "'");
+            meteringPoint = meteringPoint.trim();
+        }
+        StringBuilder flux = new StringBuilder()
+                .append("from(bucket: ").append(fluxString(bucket)).append(")")
+                .append(rangeFlux(from, to))
+                .append(" |> filter(fn: (r) => r[\"_measurement\"] == ").append(fluxString(measurement)).append(")")
+                .append(" |> filter(fn: (r) => r[\"_field\"] == \"value_kwh\")");
+        if (meteringPoint != null && !meteringPoint.isBlank()) {
+            flux.append(" |> filter(fn: (r) => r[\"metering_point\"] == ").append(fluxString(meteringPoint)).append(")");
         }
         if (direction != null) {
-            conditions.add("direction = '" + direction.name() + "'");
+            flux.append(" |> filter(fn: (r) => r[\"direction\"] == ").append(fluxString(direction.name())).append(")");
         }
-        if (from != null) {
-            conditions.add("time >= '" + from + "'");
-        }
-        if (to != null) {
-            conditions.add("time < '" + to + "'");
-        }
-
-        StringBuilder sql = new StringBuilder()
-                .append("SELECT time, metering_point, direction, category, value_kwh FROM ")
-                .append(quoteIdentifier(measurement));
-        if (!conditions.isEmpty()) {
-            sql.append(" WHERE ").append(String.join(" AND ", conditions));
-        }
-        sql.append(" ORDER BY time ASC LIMIT ").append(limit);
-        return sql.toString();
+        return flux.append(" |> group()")
+                .append(" |> sort(columns: [\"_time\"])")
+                .append(" |> limit(n: ").append(limit).append(")")
+                .toString();
     }
 
-    String buildForecastDatasetSql(DirectionType direction, Instant from, Instant to) {
+    String buildForecastDatasetFlux(DirectionType direction, Instant from, Instant to) {
         if (direction == null) {
             throw new IllegalArgumentException("direction must be provided");
         }
@@ -145,13 +133,16 @@ public class EnergySeriesRepository {
         }
 
         return new StringBuilder()
-                .append("SELECT time, SUM(value_kwh) AS value FROM ")
-                .append(quoteIdentifier(measurement))
-                .append(" WHERE direction = '").append(direction.name()).append("'")
-                .append(" AND category = '").append(EnergyCategory.TOTAL.tagValue()).append("'")
-                .append(" AND time >= '").append(from).append("'")
-                .append(" AND time < '").append(to).append("'")
-                .append(" GROUP BY time ORDER BY time ASC")
+                .append("from(bucket: ").append(fluxString(bucket)).append(")")
+                .append(rangeFlux(from, to))
+                .append(" |> filter(fn: (r) => r[\"_measurement\"] == ").append(fluxString(measurement)).append(")")
+                .append(" |> filter(fn: (r) => r[\"_field\"] == \"value_kwh\")")
+                .append(" |> filter(fn: (r) => r[\"direction\"] == ").append(fluxString(direction.name())).append(")")
+                .append(" |> filter(fn: (r) => r[\"category\"] == ").append(fluxString(EnergyCategory.TOTAL.tagValue())).append(")")
+                .append(" |> group(columns: [\"_time\"])")
+                .append(" |> sum(column: \"_value\")")
+                .append(" |> group()")
+                .append(" |> sort(columns: [\"_time\"])")
                 .toString();
     }
 
@@ -188,27 +179,42 @@ public class EnergySeriesRepository {
                 .orElseThrow(() -> new IllegalStateException("energy.influx.token must be configured for InfluxDB access"));
     }
 
-    private Point toPoint(EnergySeries series) {
-        return Point.measurement(measurement)
-                .setTag("metering_point", series.meteringPoint())
-                .setTag("direction", series.direction().name())
-                .setTag("category", series.category().tagValue())
-                .setField("value_kwh", series.valueKwh())
-                .setTimestamp(series.timestamp());
+    private InfluxDBClient newClient() {
+        return InfluxDBClientFactory.create(influxUrl, resolvedToken().toCharArray(), org, bucket);
     }
 
-    private EnergySeries toEnergySeries(Object[] row) {
+    private List<FluxRecord> queryRecords(InfluxDBClient client, String flux) {
+        return client.getQueryApi().query(flux, org).stream()
+                .map(FluxTable::getRecords)
+                .flatMap(List::stream)
+                .toList();
+    }
+
+    private Point toPoint(EnergySeries series) {
+        return Point.measurement(measurement)
+                .addTag("metering_point", series.meteringPoint())
+                .addTag("direction", series.direction().name())
+                .addTag("category", series.category().tagValue())
+                .addField("value_kwh", series.valueKwh())
+                .time(series.timestamp(), WritePrecision.NS);
+    }
+
+    private EnergySeries toEnergySeries(FluxRecord record) {
         return new EnergySeries(
-                String.valueOf(row[1]),
-                parseTime(row[0]),
-                DirectionType.valueOf(String.valueOf(row[2])),
-                EnergyCategory.fromTagValue(String.valueOf(row[3])),
-                ((Number) row[4]).doubleValue()
+                String.valueOf(record.getValueByKey("metering_point")),
+                parseTime(record.getTime()),
+                DirectionType.valueOf(String.valueOf(record.getValueByKey("direction"))),
+                EnergyCategory.fromTagValue(String.valueOf(record.getValueByKey("category"))),
+                ((Number) record.getValue()).doubleValue()
         );
     }
 
     ForecastDatasetValue toForecastDatasetValue(Object[] row) {
         return new ForecastDatasetValue(parseTime(row[0]), ((Number) row[1]).doubleValue());
+    }
+
+    ForecastDatasetValue toForecastDatasetValue(FluxRecord record) {
+        return new ForecastDatasetValue(parseTime(record.getTime()), ((Number) record.getValue()).doubleValue());
     }
 
     private Instant parseTime(Object value) {
@@ -229,11 +235,18 @@ public class EnergySeriesRepository {
         return LocalDateTime.parse(text).toInstant(ZoneOffset.UTC);
     }
 
-    private String quoteIdentifier(String value) {
-        return '"' + value.replace("\"", "\"\"") + '"';
+    private String rangeFlux(Instant from, Instant to) {
+        Instant start = Optional.ofNullable(from).orElse(Instant.EPOCH);
+        StringBuilder range = new StringBuilder(" |> range(start: time(v: ")
+                .append(fluxString(start.toString()))
+                .append(")");
+        if (to != null) {
+            range.append(", stop: time(v: ").append(fluxString(to.toString())).append(")");
+        }
+        return range.append(")").toString();
     }
 
-    private String escapeSqlLiteral(String value) {
-        return value.replace("'", "''");
+    private String fluxString(String value) {
+        return '"' + value.replace("\\", "\\\\").replace("\"", "\\\"") + '"';
     }
 }

@@ -5,16 +5,14 @@ datasources:
     uid: influxdb-energy
     type: influxdb
     access: proxy
-    url: http://influxdb:8181
+    url: http://influxdb:8086
     isDefault: true
-    database: energy
-    user: grafana
     jsonData:
-      dbName: energy
+      defaultBucket: ${INFLUXDB_BUCKET}
       httpMode: POST
-      version: InfluxQL
+      organization: ${INFLUXDB_ORG}
+      version: Flux
       product: InfluxDB OSS
-      httpHeaderName1: Authorization
     secureJsonData:
-      httpHeaderValue1: Token ${INFLUXDB_TOKEN}
+      token: ${INFLUXDB_TOKEN}
     editable: true

@@ -63,7 +63,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Erzeugung\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'total'",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"total\")\n  |> group()\n  |> sum(column: \"_value\")\n  |> map(fn: (r) => ({ r with _field: \"Erzeugung\" }))",
           "rawQuery": true,
           "refId": "A"
         }
@@ -112,7 +112,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Verbrauch\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'total'",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"total\")\n  |> group()\n  |> sum(column: \"_value\")\n  |> map(fn: (r) => ({ r with _field: \"Verbrauch\" }))",
           "rawQuery": true,
           "refId": "A"
         }
@@ -161,7 +161,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Lieferung an Gemeinschaft\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'community_effective'",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"community_effective\")\n  |> group()\n  |> sum(column: \"_value\")\n  |> map(fn: (r) => ({ r with _field: \"Lieferung an Gemeinschaft\" }))",
           "rawQuery": true,
           "refId": "A"
         }
@@ -210,7 +210,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Bezug aus Gemeinschaft\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'community_effective'",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"community_effective\")\n  |> group()\n  |> sum(column: \"_value\")\n  |> map(fn: (r) => ({ r with _field: \"Bezug aus Gemeinschaft\" }))",
           "rawQuery": true,
           "refId": "A"
         }
@@ -259,7 +259,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Netzbezug\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'residual'",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"residual\")\n  |> group()\n  |> sum(column: \"_value\")\n  |> map(fn: (r) => ({ r with _field: \"Netzbezug\" }))",
           "rawQuery": true,
           "refId": "A"
         }
@@ -308,7 +308,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Restliche Einspeisung\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'residual'",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"residual\")\n  |> group()\n  |> sum(column: \"_value\")\n  |> map(fn: (r) => ({ r with _field: \"Restliche Einspeisung\" }))",
           "rawQuery": true,
           "refId": "A"
         }
@@ -392,7 +392,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Erzeugung\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'total' GROUP BY time(15m) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"total\")\n  |> group()\n  |> aggregateWindow(every: 15m, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Erzeugung\" }))",
           "rawQuery": true,
           "refId": "A"
         },
@@ -402,7 +402,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Verbrauch\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'total' GROUP BY time(15m) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"total\")\n  |> group()\n  |> aggregateWindow(every: 15m, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Verbrauch\" }))",
           "rawQuery": true,
           "refId": "B"
         }
@@ -455,7 +455,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"An Gemeinschaft geliefert\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'community_effective' GROUP BY time(15m) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"community_effective\")\n  |> group()\n  |> aggregateWindow(every: 15m, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"An Gemeinschaft geliefert\" }))",
           "rawQuery": true,
           "refId": "A"
         },
@@ -465,7 +465,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Aus Gemeinschaft verbraucht\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'community_effective' GROUP BY time(15m) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"community_effective\")\n  |> group()\n  |> aggregateWindow(every: 15m, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Aus Gemeinschaft verbraucht\" }))",
           "rawQuery": true,
           "refId": "B"
         }
@@ -518,7 +518,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Restliche Einspeisung\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'residual' GROUP BY time(15m) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"residual\")\n  |> group()\n  |> aggregateWindow(every: 15m, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Restliche Einspeisung\" }))",
           "rawQuery": true,
           "refId": "A"
         },
@@ -528,7 +528,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Restlicher Bezug\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'residual' GROUP BY time(15m) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"residual\")\n  |> group()\n  |> aggregateWindow(every: 15m, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Restlicher Bezug\" }))",
           "rawQuery": true,
           "refId": "B"
         }
@@ -581,7 +581,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Tägliche Erzeugung\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'total' GROUP BY time(1d) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"total\")\n  |> group()\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Tägliche Erzeugung\" }))",
           "rawQuery": true,
           "refId": "A"
         },
@@ -591,7 +591,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Täglicher Verbrauch\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'total' GROUP BY time(1d) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"total\")\n  |> group()\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Täglicher Verbrauch\" }))",
           "rawQuery": true,
           "refId": "B"
         }
@@ -644,7 +644,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Tägliche Gemeinschaftslieferung\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'community_effective' GROUP BY time(1d) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"community_effective\")\n  |> group()\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Tägliche Gemeinschaftslieferung\" }))",
           "rawQuery": true,
           "refId": "A"
         },
@@ -654,7 +654,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Täglicher Gemeinschaftsverbrauch\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'community_effective' GROUP BY time(1d) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"community_effective\")\n  |> group()\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Täglicher Gemeinschaftsverbrauch\" }))",
           "rawQuery": true,
           "refId": "B"
         }
@@ -707,7 +707,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Tägliche Resteinspeisung\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'DELIVERY' AND \"category\" = 'residual' GROUP BY time(1d) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"residual\")\n  |> group()\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Tägliche Resteinspeisung\" }))",
           "rawQuery": true,
           "refId": "A"
         },
@@ -717,7 +717,7 @@
             "type": "influxdb",
             "uid": "influxdb-energy"
           },
-          "query": "SELECT sum(\"value_kwh\") AS \"Täglicher Restbezug\" FROM \"energy_values\" WHERE $timeFilter AND \"direction\" = 'CONSUMPTION' AND \"category\" = 'residual' GROUP BY time(1d) fill(null)",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"residual\")\n  |> group()\n  |> aggregateWindow(every: 1d, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: \"Täglicher Restbezug\" }))",
           "rawQuery": true,
           "refId": "B"
         }

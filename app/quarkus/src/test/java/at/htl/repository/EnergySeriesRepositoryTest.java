@@ -2,7 +2,6 @@ package at.htl.repository;
 
 import at.htl.model.DirectionType;
 import at.htl.model.ForecastDatasetValue;
-import com.influxdb.v3.client.write.WriteOptions;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -16,17 +15,18 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class EnergySeriesRepositoryTest {
 
     @Test
-    void buildForecastDatasetSqlAggregatesTotalByTimeAndDirection() throws Exception {
+    void buildForecastDatasetFluxAggregatesTotalByTimeAndDirection() throws Exception {
         EnergySeriesRepository repository = new EnergySeriesRepository();
         setField(repository, "measurement", "energy_values");
+        setField(repository, "bucket", "energy");
 
-        String sql = repository.buildForecastDatasetSql(
+        String flux = repository.buildForecastDatasetFlux(
                 DirectionType.CONSUMPTION,
                 Instant.parse("2025-06-01T00:00:00Z"),
                 Instant.parse("2025-06-02T00:00:00Z")
         );
 
-        assertEquals("SELECT time, SUM(value_kwh) AS value FROM \"energy_values\" WHERE direction = 'CONSUMPTION' AND category = 'total' AND time >= '2025-06-01T00:00:00Z' AND time < '2025-06-02T00:00:00Z' GROUP BY time ORDER BY time ASC", sql);
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"2025-06-01T00:00:00Z\"), stop: time(v: \"2025-06-02T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"energy_values\") |> filter(fn: (r) => r[\"_field\"] == \"value_kwh\") |> filter(fn: (r) => r[\"direction\"] == \"CONSUMPTION\") |> filter(fn: (r) => r[\"category\"] == \"total\") |> group(columns: [\"_time\"]) |> sum(column: \"_value\") |> group() |> sort(columns: [\"_time\"])", flux);
     }
 
     @Test
@@ -69,16 +69,6 @@ class EnergySeriesRepositoryTest {
     }
 
     @Test
-    void writeOptionsUseConfiguredGzipThreshold() throws Exception {
-        EnergySeriesRepository repository = new EnergySeriesRepository();
-        setField(repository, "gzipThresholdBytes", 1);
-
-        WriteOptions options = repository.writeOptions();
-
-        assertEquals(1, getField(options, "gzipThreshold"));
-    }
-
-    @Test
     void resolvedWriteBatchSizeRejectsNonPositiveValues() throws Exception {
         EnergySeriesRepository repository = new EnergySeriesRepository();
         setField(repository, "writeBatchSize", 0);
@@ -94,9 +84,4 @@ class EnergySeriesRepositoryTest {
         field.set(target, value);
     }
 
-    private Object getField(Object target, String name) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return field.get(target);
-    }
 }

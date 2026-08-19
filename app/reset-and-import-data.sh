@@ -4,7 +4,6 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
-INFLUX_DATABASE="energy"
 INFLUX_WAIT_SECONDS="${INFLUX_WAIT_SECONDS:-60}"
 ENERGY_IMPORT_BUILD="${ENERGY_IMPORT_BUILD:-auto}"
 ENERGY_IMPORT_WRITE_BATCH_SIZE="${ENERGY_IMPORT_WRITE_BATCH_SIZE:-50000}"
@@ -20,7 +19,9 @@ if [ -f ./.env ]; then
 fi
 
 : "${INFLUXDB_TOKEN:=$DEFAULT_INFLUXDB_TOKEN}"
-export INFLUXDB_TOKEN
+: "${INFLUXDB_ORG:=kirchdorf}"
+: "${INFLUXDB_BUCKET:=energy}"
+export INFLUXDB_TOKEN INFLUXDB_ORG INFLUXDB_BUCKET
 
 if [ "${1:-}" = "--help" ]; then
   printf 'Usage: %s [csv-directory]\n' "$0"
@@ -29,7 +30,7 @@ fi
 
 wait_for_influx() {
   attempts=0
-  until docker compose exec -T influxdb influxdb3 query --token "$INFLUXDB_TOKEN" --database _internal "SHOW TABLES" >/dev/null 2>&1; do
+  until docker compose exec -T influxdb influx ping --host http://localhost:8086 >/dev/null 2>&1; do
     attempts=$((attempts + 1))
     if [ "$attempts" -ge "$INFLUX_WAIT_SECONDS" ]; then
       printf 'Timed out waiting for InfluxDB after %s seconds. Check Docker and INFLUXDB_TOKEN.\n' "$INFLUX_WAIT_SECONDS" >&2
@@ -68,14 +69,20 @@ should_build_backend() {
 docker compose --profile server stop backend >/dev/null 2>&1 || true
 
 printf 'Starting InfluxDB...\n'
-docker compose up -d influxdb influxdb-init
+docker compose up -d influxdb
 
 printf 'Waiting for InfluxDB...\n'
 wait_for_influx
 
-printf 'Recreating database %s...\n' "$INFLUX_DATABASE"
-docker compose exec -T influxdb influxdb3 delete database --token "$INFLUXDB_TOKEN" "$INFLUX_DATABASE" --hard-delete now --yes >/dev/null 2>&1 || true
-docker compose exec -T influxdb influxdb3 create database --token "$INFLUXDB_TOKEN" "$INFLUX_DATABASE"
+printf 'Recreating bucket %s in org %s...\n' "$INFLUXDB_BUCKET" "$INFLUXDB_ORG"
+docker compose exec -T influxdb influx bucket delete \
+  --name "$INFLUXDB_BUCKET" \
+  --org "$INFLUXDB_ORG" \
+  --token "$INFLUXDB_TOKEN" >/dev/null 2>&1 || true
+docker compose exec -T influxdb influx bucket create \
+  --name "$INFLUXDB_BUCKET" \
+  --org "$INFLUXDB_ORG" \
+  --token "$INFLUXDB_TOKEN" >/dev/null
 
 if should_build_backend; then
   printf 'Building backend image...\n'
@@ -90,7 +97,9 @@ docker compose --profile server run --rm --no-deps \
   -Dquarkus.http.host=127.0.0.1 \
   -Dquarkus.http.port=0 \
   -Denergy.influx.token="$INFLUXDB_TOKEN" \
-  -Denergy.influx.database="$INFLUX_DATABASE" \
+  -Denergy.influx.url=http://influxdb:8086 \
+  -Denergy.influx.org="$INFLUXDB_ORG" \
+  -Denergy.influx.bucket="$INFLUXDB_BUCKET" \
   -Denergy.influx.write-batch-size="$ENERGY_IMPORT_WRITE_BATCH_SIZE" \
   -Denergy.influx.gzip-threshold-bytes="$ENERGY_IMPORT_GZIP_THRESHOLD_BYTES" \
   -Denergy.import.command.directory=/import-data \

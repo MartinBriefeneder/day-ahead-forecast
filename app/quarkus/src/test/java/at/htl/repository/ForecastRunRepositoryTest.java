@@ -6,8 +6,7 @@ import at.htl.model.ForecastMetric;
 import at.htl.model.ForecastPoint;
 import at.htl.model.ForecastRunRequest;
 import at.htl.model.ForecastRunSummary;
-import com.influxdb.v3.client.Point;
-import com.influxdb.v3.client.write.WriteOptions;
+import com.influxdb.client.write.Point;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -19,88 +18,96 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ForecastRunRepositoryTest {
 
     @Test
-    void buildComparisonSqlFiltersByRunIdAndLimit() throws Exception {
+    void buildComparisonFluxFiltersByRunIdAndLimit() throws Exception {
         ForecastRunRepository repository = new ForecastRunRepository();
         setField(repository, "forecastMeasurement", "energy_forecasts");
+        setField(repository, "bucket", "energy");
 
-        String sql = repository.buildComparisonSql("run-1", 96);
+        String flux = repository.buildComparisonFlux("run-1", 96);
 
-        assertEquals("SELECT time, forecast_kwh, actual_kwh, error_kwh FROM \"energy_forecasts\" WHERE run_id = 'run-1' ORDER BY time ASC LIMIT 96", sql);
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"1970-01-01T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"energy_forecasts\") |> filter(fn: (r) => r[\"run_id\"] == \"run-1\") |> filter(fn: (r) => contains(value: r[\"_field\"], set: [\"forecast_kwh\", \"actual_kwh\", \"error_kwh\"])) |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> sort(columns: [\"_time\"]) |> limit(n: 96)", flux);
     }
 
     @Test
-    void buildComparisonSqlAllowsFourWeekQuarterHourLimit() throws Exception {
+    void buildComparisonFluxAllowsFourWeekQuarterHourLimit() throws Exception {
         ForecastRunRepository repository = new ForecastRunRepository();
         setField(repository, "forecastMeasurement", "energy_forecasts");
+        setField(repository, "bucket", "energy");
 
-        String sql = repository.buildComparisonSql("run-1", 2688);
+        String flux = repository.buildComparisonFlux("run-1", 2688);
 
-        assertEquals("SELECT time, forecast_kwh, actual_kwh, error_kwh FROM \"energy_forecasts\" WHERE run_id = 'run-1' ORDER BY time ASC LIMIT 2688", sql);
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"1970-01-01T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"energy_forecasts\") |> filter(fn: (r) => r[\"run_id\"] == \"run-1\") |> filter(fn: (r) => contains(value: r[\"_field\"], set: [\"forecast_kwh\", \"actual_kwh\", \"error_kwh\"])) |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> sort(columns: [\"_time\"]) |> limit(n: 2688)", flux);
     }
 
     @Test
-    void buildComparisonSqlEscapesRunId() throws Exception {
+    void buildComparisonFluxEscapesRunId() throws Exception {
         ForecastRunRepository repository = new ForecastRunRepository();
         setField(repository, "forecastMeasurement", "energy_forecasts");
+        setField(repository, "bucket", "energy");
 
-        String sql = repository.buildComparisonSql("run'1", 1);
+        String flux = repository.buildComparisonFlux("run\"1", 1);
 
-        assertEquals("SELECT time, forecast_kwh, actual_kwh, error_kwh FROM \"energy_forecasts\" WHERE run_id = 'run''1' ORDER BY time ASC LIMIT 1", sql);
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"1970-01-01T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"energy_forecasts\") |> filter(fn: (r) => r[\"run_id\"] == \"run\\\"1\") |> filter(fn: (r) => contains(value: r[\"_field\"], set: [\"forecast_kwh\", \"actual_kwh\", \"error_kwh\"])) |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> sort(columns: [\"_time\"]) |> limit(n: 1)", flux);
     }
 
     @Test
-    void buildRunsSqlFiltersByTargetAndLimit() throws Exception {
+    void buildRunsFluxFiltersByTargetAndLimit() throws Exception {
         ForecastRunRepository repository = new ForecastRunRepository();
         setField(repository, "metadataMeasurement", "forecast_run_metadata");
+        setField(repository, "bucket", "energy");
 
-        String sql = repository.buildRunsSql("generation", 25);
+        String flux = repository.buildRunsFlux("generation", 25);
 
-        assertEquals("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, sample_interval, horizon, model_family, report_path FROM \"forecast_run_metadata\" WHERE target = 'generation' ORDER BY time DESC LIMIT 25", sql);
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"1970-01-01T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"forecast_run_metadata\") |> filter(fn: (r) => contains(value: r[\"_field\"], set: [\"generated_at\", \"train_start\", \"train_end\", \"forecast_start\", \"forecast_end\", \"sample_interval\", \"horizon\", \"model_family\", \"report_path\"])) |> filter(fn: (r) => r[\"target\"] == \"generation\") |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> sort(columns: [\"_time\"], desc: true) |> limit(n: 25)", flux);
     }
 
     @Test
-    void buildRunsSqlAllowsAllTargets() throws Exception {
+    void buildRunsFluxAllowsAllTargets() throws Exception {
         ForecastRunRepository repository = new ForecastRunRepository();
         setField(repository, "metadataMeasurement", "forecast_run_metadata");
+        setField(repository, "bucket", "energy");
 
-        String sql = repository.buildRunsSql(null, 10);
+        String flux = repository.buildRunsFlux(null, 10);
 
-        assertEquals("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, sample_interval, horizon, model_family, report_path FROM \"forecast_run_metadata\" ORDER BY time DESC LIMIT 10", sql);
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"1970-01-01T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"forecast_run_metadata\") |> filter(fn: (r) => contains(value: r[\"_field\"], set: [\"generated_at\", \"train_start\", \"train_end\", \"forecast_start\", \"forecast_end\", \"sample_interval\", \"horizon\", \"model_family\", \"report_path\"])) |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> sort(columns: [\"_time\"], desc: true) |> limit(n: 10)", flux);
     }
 
     @Test
-    void buildRunsSqlCanOmitMissingReportPath() throws Exception {
+    void buildRunsFluxCanOmitMissingReportPath() throws Exception {
         ForecastRunRepository repository = new ForecastRunRepository();
         setField(repository, "metadataMeasurement", "forecast_run_metadata");
+        setField(repository, "bucket", "energy");
 
-        String sql = repository.buildRunsSql("generation", 25, false);
+        String flux = repository.buildRunsFlux("generation", 25, false);
 
-        assertEquals("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, sample_interval, horizon, model_family FROM \"forecast_run_metadata\" WHERE target = 'generation' ORDER BY time DESC LIMIT 25", sql);
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"1970-01-01T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"forecast_run_metadata\") |> filter(fn: (r) => contains(value: r[\"_field\"], set: [\"generated_at\", \"train_start\", \"train_end\", \"forecast_start\", \"forecast_end\", \"sample_interval\", \"horizon\", \"model_family\"])) |> filter(fn: (r) => r[\"target\"] == \"generation\") |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> sort(columns: [\"_time\"], desc: true) |> limit(n: 25)", flux);
     }
 
     @Test
-    void buildRunSqlFiltersByRunId() throws Exception {
+    void buildRunFluxFiltersByRunId() throws Exception {
         ForecastRunRepository repository = new ForecastRunRepository();
         setField(repository, "metadataMeasurement", "forecast_run_metadata");
+        setField(repository, "bucket", "energy");
 
-        String sql = repository.buildRunSql("run'1", true);
+        String flux = repository.buildRunFlux("run\"1", true);
 
-        assertEquals("SELECT run_id, model, target, generated_at, train_start, train_end, forecast_start, forecast_end, sample_interval, horizon, model_family, report_path FROM \"forecast_run_metadata\" WHERE run_id = 'run''1' ORDER BY time DESC LIMIT 1", sql);
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"1970-01-01T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"forecast_run_metadata\") |> filter(fn: (r) => r[\"run_id\"] == \"run\\\"1\") |> filter(fn: (r) => contains(value: r[\"_field\"], set: [\"generated_at\", \"train_start\", \"train_end\", \"forecast_start\", \"forecast_end\", \"sample_interval\", \"horizon\", \"model_family\", \"report_path\"])) |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> sort(columns: [\"_time\"], desc: true) |> limit(n: 1)", flux);
     }
 
     @Test
-    void buildActualValuesSqlUsesTargetDirectionAndTotalCategory() throws Exception {
+    void buildActualValuesFluxUsesTargetDirectionAndTotalCategory() throws Exception {
         ForecastRunRepository repository = new ForecastRunRepository();
         setField(repository, "actualMeasurement", "energy_values");
+        setField(repository, "bucket", "energy");
 
-        String sql = repository.buildActualValuesSql(
+        String flux = repository.buildActualValuesFlux(
                 ForecastDatasetTarget.GENERATION,
                 Instant.parse("2025-12-01T00:00:00Z"),
                 Instant.parse("2025-12-02T00:00:00Z"),
                 96
         );
 
-        assertEquals("SELECT time, SUM(value_kwh) AS value FROM \"energy_values\" WHERE direction = 'DELIVERY' AND category = 'total' AND time >= '2025-12-01T00:00:00Z' AND time < '2025-12-02T00:00:00Z' GROUP BY time ORDER BY time ASC LIMIT 96", sql);
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"2025-12-01T00:00:00Z\"), stop: time(v: \"2025-12-02T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"energy_values\") |> filter(fn: (r) => r[\"_field\"] == \"value_kwh\") |> filter(fn: (r) => r[\"direction\"] == \"DELIVERY\") |> filter(fn: (r) => r[\"category\"] == \"total\") |> group(columns: [\"_time\"]) |> sum(column: \"_value\") |> group() |> sort(columns: [\"_time\"]) |> limit(n: 96)", flux);
     }
 
     @Test
@@ -187,42 +194,27 @@ class ForecastRunRepositoryTest {
         setField(repository, "metadataMeasurement", "forecast_run_metadata");
 
         Point point = repository.toMetadataPoint(validRequest());
+        String lineProtocol = point.toLineProtocol();
 
-        assertEquals("forecast_run_metadata", point.getMeasurement());
-        assertEquals("run-1", point.getTag("run_id"));
-        assertEquals("consumption", point.getTag("target"));
-        assertEquals("historical-average", point.getTag("model"));
-        assertEquals("2026-01-01T00:00:00Z", point.getStringField("generated_at"));
-        assertEquals("2025-11-01T00:00:00Z", point.getStringField("train_start"));
-        assertEquals("2025-12-01T00:00:00Z", point.getStringField("train_end"));
-        assertEquals("2025-12-01T00:00:00Z", point.getStringField("forecast_start"));
-        assertEquals("2025-12-02T00:00:00Z", point.getStringField("forecast_end"));
-        assertEquals("PT15M", point.getStringField("sample_interval"));
-        assertEquals("P14D", point.getStringField("horizon"));
-        assertEquals("simple-benchmark", point.getStringField("model_family"));
-        assertEquals("app/reports/forecast-runs/forecast-backtest-report.md", point.getStringField("report_path"));
-    }
-
-    @Test
-    void writeOptionsUseConfiguredGzipThreshold() throws Exception {
-        ForecastRunRepository repository = new ForecastRunRepository();
-        setField(repository, "gzipThresholdBytes", 1);
-
-        WriteOptions options = repository.writeOptions();
-
-        assertEquals(1, getField(options, "gzipThreshold"));
+        assertEquals(true, lineProtocol.startsWith("forecast_run_metadata,"));
+        assertEquals(true, lineProtocol.contains("run_id=run-1"));
+        assertEquals(true, lineProtocol.contains("target=consumption"));
+        assertEquals(true, lineProtocol.contains("model=historical-average"));
+        assertEquals(true, lineProtocol.contains("generated_at=\"2026-01-01T00:00:00Z\""));
+        assertEquals(true, lineProtocol.contains("train_start=\"2025-11-01T00:00:00Z\""));
+        assertEquals(true, lineProtocol.contains("train_end=\"2025-12-01T00:00:00Z\""));
+        assertEquals(true, lineProtocol.contains("forecast_start=\"2025-12-01T00:00:00Z\""));
+        assertEquals(true, lineProtocol.contains("forecast_end=\"2025-12-02T00:00:00Z\""));
+        assertEquals(true, lineProtocol.contains("sample_interval=\"PT15M\""));
+        assertEquals(true, lineProtocol.contains("horizon=\"P14D\""));
+        assertEquals(true, lineProtocol.contains("model_family=\"simple-benchmark\""));
+        assertEquals(true, lineProtocol.contains("report_path=\"app/reports/forecast-runs/forecast-backtest-report.md\""));
     }
 
     private void setField(Object target, String name, Object value) throws Exception {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
         field.set(target, value);
-    }
-
-    private Object getField(Object target, String name) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return field.get(target);
     }
 
     private ForecastRunRequest validRequest() {

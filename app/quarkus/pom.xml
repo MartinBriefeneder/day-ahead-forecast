@@ -50,8 +50,8 @@
         </dependency>
         <dependency>
             <groupId>com.influxdb</groupId>
-            <artifactId>influxdb3-java</artifactId>
-            <version>1.10.0</version>
+            <artifactId>influxdb-client-java</artifactId>
+            <version>7.3.0</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
