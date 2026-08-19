@@ -33,13 +33,20 @@ services:
     image: influxdb:3-core
     environment:
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running docker compose up}
+      INFLUX_WAIT_SECONDS: ${INFLUX_WAIT_SECONDS:-60}
     depends_on:
       - influxdb
     entrypoint:
       - /bin/sh
       - -c
       - |
+        attempts=0
         until influxdb3 query --host http://influxdb:8181 --token "$$INFLUXDB_TOKEN" --database _internal "SHOW TABLES" >/dev/null 2>&1; do
+          attempts=$$(($$attempts + 1))
+          if [ "$$attempts" -ge "$$INFLUX_WAIT_SECONDS" ]; then
+            printf 'Timed out waiting for InfluxDB after %s seconds. Check InfluxDB logs and INFLUXDB_TOKEN.\n' "$$INFLUX_WAIT_SECONDS" >&2
+            exit 1
+          fi
           sleep 1
         done
         influxdb3 create database --host http://influxdb:8181 --token "$$INFLUXDB_TOKEN" energy >/dev/null 2>&1 || true
