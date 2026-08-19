@@ -1,0 +1,31 @@
+name: day-ahead-forecast-influxdb3-plain-trial
+services:
+  influxdb3-plain-trial:
+    container_name: influxdb3-plain-trial
+    image: influxdb:3.10.1-core
+    ports:
+      - 8182:8181
+    restart: on-failure:5
+    command:
+      - influxdb3
+      - serve
+      - --without-auth
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+      - --query-file-limit=30000
+      - --disable-telemetry-upload
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - influxdb3 query --host http://localhost:8181 --database _internal "SHOW TABLES" >/dev/null
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+    volumes:
+      - type: volume
+        source: influxdb3-plain-trial-data
+        target: /var/lib/influxdb3/data
+volumes:
+  influxdb3-plain-trial-data:
