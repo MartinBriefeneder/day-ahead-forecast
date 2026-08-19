@@ -13,21 +13,27 @@ from forecast_runner import (
     DEFAULT_FORECAST_DAYS,
     DEFAULT_TARGET,
     DEFAULT_TRAIN_DAYS,
+    FORECAST_WEATHER_FEATURES,
     HORIZON,
     OUTPUT_DIR,
     SAMPLE_INTERVAL,
     WEATHER_FEATURES,
     format_utc,
+    forecast_start_is_future,
     metric_items,
     none_if_nan,
+    openstef_weather_config_kwargs,
     parse_utc,
     prediction_context_start,
     require_positive_int,
     resolve_forecast_window,
     run_id_for_model,
 )
+from future_openstef_xgboost import build_prediction_frame as build_future_prediction_frame
+from future_openstef_xgboost import build_training_frame as build_future_training_frame
+from future_openstef_xgboost import time_series_dataset
 from main import compute_metrics
-from weather_features import DEFAULT_WEATHER_PATH
+from weather_features import DEFAULT_GRIDOO_LOCATION_ID, DEFAULT_WEATHER_PATH
 
 DEFAULT_N_TRIALS = 10
 
@@ -36,7 +42,7 @@ def run_id(target: str, model: str, forecast_start: datetime) -> str:
     return run_id_for_model(target, model, forecast_start)
 
 
-def create_xgboost_config(target: str, *, tuned: bool):
+def create_xgboost_config(target: str, *, tuned: bool, weather_features: tuple[str, ...] = WEATHER_FEATURES):
     from openstef_beam.evaluation.metric_providers import ObservedProbabilityProvider, R2Provider, RCRPSProvider
     from openstef_core.mixins.param_ranges import FloatRange, IntRange
     from openstef_core.types import LeadTime, Q
@@ -59,11 +65,7 @@ def create_xgboost_config(target: str, *, tuned: bool):
         horizons=[LeadTime.from_string(HORIZON)],
         quantiles=[Q(0.5), Q(0.1), Q(0.9)],
         target_column=target,
-        temperature_column="temperature_2m",
-        relative_humidity_column="relative_humidity_2m",
-        wind_speed_column="wind_speed_10m",
-        radiation_column="shortwave_radiation",
-        pressure_column="surface_pressure",
+        **openstef_weather_config_kwargs(weather_features),
         xgboost_hyperparams=hyperparams,
         evaluation_metrics=[R2Provider(), ObservedProbabilityProvider(), RCRPSProvider()],
         mlflow_storage=None,
@@ -71,22 +73,22 @@ def create_xgboost_config(target: str, *, tuned: bool):
     )
 
 
-def fit_default(train_dataset):
+def fit_default(train_dataset, weather_features: tuple[str, ...] = WEATHER_FEATURES):
     from openstef_models.presets import create_forecasting_workflow
 
-    config = create_xgboost_config(train_dataset.data.attrs["target"], tuned=False)
+    config = create_xgboost_config(train_dataset.data.attrs["target"], tuned=False, weather_features=weather_features)
     workflow = create_forecasting_workflow(config)
     workflow.fit(train_dataset)
     return workflow, config, None
 
 
-def fit_tuned(train_dataset, *, n_trials: int, show_progress_bar: bool):
+def fit_tuned(train_dataset, *, n_trials: int, show_progress_bar: bool, weather_features: tuple[str, ...] = WEATHER_FEATURES):
     import optuna
     from openstef_models.integrations.optuna import HyperparameterTuner
     from openstef_models.presets import create_forecasting_workflow
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
-    config = create_xgboost_config(train_dataset.data.attrs["target"], tuned=True)
+    config = create_xgboost_config(train_dataset.data.attrs["target"], tuned=True, weather_features=weather_features)
     tuner = HyperparameterTuner(
         config=config,
         train_dataset=train_dataset,
@@ -260,29 +262,53 @@ def main(argv: list[str] | None = None) -> None:
         forecast_days=args.forecast_days,
     )
 
-    dataset = fetch_forecast_dataset(
-        base_url=args.base_url,
-        target=args.target,
-        start=format_utc(train_start),
-        end=format_utc(forecast_end),
-        include_weather=True,
-        weather_path=args.weather_path,
-        weather_features=WEATHER_FEATURES,
-        require_complete_weather=True,
-    )
-    dataset.data.attrs["target"] = args.target
-    if dataset.data.empty:
-        raise ValueError("Dataset is empty. Check that imported energy data and weather data are available.")
+    future_run = forecast_start_is_future(forecast_start)
+    weather_features = FORECAST_WEATHER_FEATURES if future_run else WEATHER_FEATURES
+    if future_run:
+        train_dataset = time_series_dataset(
+            build_future_training_frame(
+                base_url=args.base_url,
+                target=args.target,
+                train_start=train_start,
+                train_end=train_end,
+                weather_path=args.weather_path,
+            )
+        )
+        predict_dataset = time_series_dataset(
+            build_future_prediction_frame(
+                base_url=args.base_url,
+                target=args.target,
+                context_start=prediction_context_start(forecast_start),
+                forecast_start=forecast_start,
+                forecast_end=forecast_end,
+                weather_path=args.weather_path,
+                gridoo_location_id=DEFAULT_GRIDOO_LOCATION_ID,
+            )
+        )
+    else:
+        dataset = fetch_forecast_dataset(
+            base_url=args.base_url,
+            target=args.target,
+            start=format_utc(train_start),
+            end=format_utc(forecast_end),
+            include_weather=True,
+            weather_path=args.weather_path,
+            weather_features=WEATHER_FEATURES,
+            require_complete_weather=True,
+        )
+        dataset.data.attrs["target"] = args.target
+        if dataset.data.empty:
+            raise ValueError("Dataset is empty. Check that imported energy data and weather data are available.")
 
-    train_dataset = dataset.filter_by_range(start=train_start, end=train_end)
-    predict_dataset = dataset.filter_by_range(start=prediction_context_start(train_end), end=forecast_end)
-    train_dataset.data.attrs["target"] = args.target
+        train_dataset = dataset.filter_by_range(start=train_start, end=train_end)
+        predict_dataset = dataset.filter_by_range(start=prediction_context_start(forecast_start), end=forecast_end)
+        train_dataset.data.attrs["target"] = args.target
 
     generated_at = datetime.now(timezone.utc)
     print(f"Training rows: {len(train_dataset.data):,}")
     print(f"Prediction rows: {len(predict_dataset.data):,}")
 
-    default_workflow, default_config, _ = fit_default(train_dataset)
+    default_workflow, default_config, _ = fit_default(train_dataset, weather_features)
     default_payload, default_metrics = forecast_payload(
         workflow=default_workflow,
         model="openstef-xgboost-default",
@@ -299,6 +325,7 @@ def main(argv: list[str] | None = None) -> None:
         train_dataset,
         n_trials=args.n_trials,
         show_progress_bar=not args.no_progress,
+        weather_features=weather_features,
     )
     tuned_payload, tuned_metrics = forecast_payload(
         workflow=tuned_workflow,
@@ -312,7 +339,7 @@ def main(argv: list[str] | None = None) -> None:
         forecast_end=forecast_end,
     )
 
-    weather_diagnostics = dataset.data.attrs.get("weather_diagnostics", {})
+    weather_diagnostics = train_dataset.data.attrs.get("weather_diagnostics", {})
     metadata = {
         "generatedAt": format_utc(generated_at),
         "target": args.target,

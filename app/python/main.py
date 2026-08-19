@@ -90,7 +90,12 @@ def resolve_windows(args: argparse.Namespace) -> tuple[datetime, datetime, datet
     horizon = timedelta(days=args.forecast_days) if args.forecast_days is not None else timedelta(weeks=forecast_weeks)
     if args.forecast_start:
         forecast_start = parse_utc_argument(args.forecast_start)
-        train_start = parse_utc_argument(args.train_start) if args.train_start else forecast_start - timedelta(days=args.train_days)
+        if args.train_start:
+            train_start = parse_utc_argument(args.train_start)
+        elif forecast_start >= datetime.now(timezone.utc):
+            train_start = TRAIN_START
+        else:
+            train_start = forecast_start - timedelta(days=args.train_days)
     else:
         train_start = parse_utc_argument(args.train_start) if args.train_start else TRAIN_START
         forecast_start = train_start + timedelta(days=args.train_days)

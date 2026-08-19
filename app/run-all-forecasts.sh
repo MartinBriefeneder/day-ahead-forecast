@@ -4,13 +4,13 @@ set -euo pipefail
 script_dir="$(dirname "$0")"
 train_start=""
 train_days="90"
-forecast_start="2025-09-09T00:00:00Z"
+forecast_start=""
 forecast_days="7"
 target="all"
 
 usage() {
   printf 'Usage: %s [--target generation|consumption|all] [--train-start ISO] [--train-days DAYS] [--forecast-start ISO] [--forecast-days DAYS]\n' "$0"
-  printf 'Defaults: --target all --train-days 90 --forecast-start 2025-09-09T00:00:00Z --forecast-days 7\n'
+  printf 'Defaults: --target all --train-days 90 --forecast-start next-quarter-hour --forecast-days 7\n'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -58,6 +58,10 @@ case "$target" in
     exit 2
     ;;
 esac
+
+if [ -z "$forecast_start" ]; then
+  forecast_start="$(python3 -c 'from datetime import datetime, timedelta, timezone; now = datetime.now(timezone.utc).replace(second=0, microsecond=0); minute = (now.minute // 15 + 1) * 15; value = now.replace(minute=0) + timedelta(hours=1) if minute == 60 else now.replace(minute=minute); print(value.isoformat().replace("+00:00", "Z"))')"
+fi
 
 forecast_end="$(python3 -c 'from datetime import datetime, timedelta, timezone; import sys; print((datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).astimezone(timezone.utc) + timedelta(days=int(sys.argv[2]))).isoformat().replace("+00:00", "Z"))' "$forecast_start" "$forecast_days")"
 

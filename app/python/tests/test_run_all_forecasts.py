@@ -25,6 +25,7 @@ class RunAllForecastsScriptTest(unittest.TestCase):
 
         self.assertIn('--forecast-start ISO', script)
         self.assertIn('--forecast-days DAYS', script)
+        self.assertIn('next-quarter-hour', script)
         self.assertIn('common_args=(--target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")', script)
         self.assertIn('common_args+=(--train-start "$train_start")', script)
 

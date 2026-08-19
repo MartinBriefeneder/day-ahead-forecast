@@ -23,6 +23,18 @@ WEATHER_FEATURES = (
     "shortwave_radiation",
     "surface_pressure",
 )
+FORECAST_WEATHER_FEATURES = (
+    "temperature_2m",
+    "wind_speed_10m",
+    "shortwave_radiation",
+)
+OPENSTEF_WEATHER_COLUMNS = {
+    "temperature_2m": "temperature_column",
+    "relative_humidity_2m": "relative_humidity_column",
+    "wind_speed_10m": "wind_speed_column",
+    "shortwave_radiation": "radiation_column",
+    "surface_pressure": "pressure_column",
+}
 
 
 def parse_utc(value: str) -> datetime:
@@ -65,6 +77,41 @@ def prediction_context_start(forecast_start: datetime, context_days: int = DEFAU
     return forecast_start - timedelta(days=context_days)
 
 
+def forecast_start_is_future(forecast_start: datetime, now: datetime | None = None) -> bool:
+    reference = datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
+    return forecast_start.astimezone(timezone.utc) >= reference
+
+
+def openstef_weather_config_kwargs(weather_features: tuple[str, ...]) -> dict[str, str]:
+    unknown = [feature for feature in weather_features if feature not in OPENSTEF_WEATHER_COLUMNS]
+    if unknown:
+        raise ValueError("Unsupported OpenSTEF weather feature(s): " + ", ".join(unknown))
+    return {OPENSTEF_WEATHER_COLUMNS[feature]: feature for feature in weather_features}
+
+
+def resolve_training_window_for_forecast(
+    *,
+    train_start: str | None,
+    train_days: int,
+    forecast_start: datetime,
+) -> tuple[datetime, datetime]:
+    require_positive_int("train-days", train_days)
+    if train_start:
+        resolved_train_start = parse_utc(train_start)
+    elif forecast_start_is_future(forecast_start):
+        resolved_train_start = parse_utc(DEFAULT_TRAIN_START)
+    else:
+        resolved_train_start = forecast_start - timedelta(days=train_days)
+    resolved_train_end = resolved_train_start + timedelta(days=train_days)
+    if forecast_start_is_future(forecast_start) and resolved_train_end > forecast_start:
+        raise ValueError("Training window must end before or at forecast-start for a future forecast.")
+    if not forecast_start_is_future(forecast_start):
+        resolved_train_end = forecast_start
+    if not resolved_train_end > resolved_train_start:
+        raise ValueError("Training window must end after train-start")
+    return resolved_train_start, resolved_train_end
+
+
 def resolve_forecast_window(
     *,
     train_start: str | None,
@@ -76,8 +123,11 @@ def resolve_forecast_window(
     require_positive_int("forecast-days", forecast_days)
     if forecast_start:
         resolved_forecast_start = parse_utc(forecast_start)
-        resolved_train_start = parse_utc(train_start) if train_start else resolved_forecast_start - timedelta(days=train_days)
-        resolved_train_end = resolved_forecast_start
+        resolved_train_start, resolved_train_end = resolve_training_window_for_forecast(
+            train_start=train_start,
+            train_days=train_days,
+            forecast_start=resolved_forecast_start,
+        )
     else:
         resolved_train_start = parse_utc(train_start) if train_start else parse_utc(DEFAULT_TRAIN_START)
         resolved_train_end = resolved_train_start + timedelta(days=train_days)
