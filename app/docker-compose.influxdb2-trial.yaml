@@ -1,0 +1,36 @@
+name: day-ahead-forecast-influxdb2-trial
+services:
+  influxdb2-trial:
+    container_name: influxdb2-trial
+    image: influxdb:2.7
+    ports:
+      - 8086:8086
+    restart: on-failure:5
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB2_TRIAL_USERNAME:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB2_TRIAL_PASSWORD:-local-demo-password}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB2_TRIAL_ADMIN_TOKEN:-local-demo-token}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB2_TRIAL_ORG:-day-ahead-forecast}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB2_TRIAL_BUCKET:-energy}
+    healthcheck:
+      test:
+        - CMD
+        - influx
+        - ping
+        - --host
+        - http://localhost:8086
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+    volumes:
+      - type: volume
+        source: influxdb2-trial-data
+        target: /var/lib/influxdb2
+      - type: volume
+        source: influxdb2-trial-config
+        target: /etc/influxdb2
+volumes:
+  influxdb2-trial-data:
+  influxdb2-trial-config:
