@@ -89,7 +89,7 @@ services:
           -Denergy.influx.org="$$ENERGY_INFLUX_ORG" \
           -Denergy.influx.bucket="$$ENERGY_INFLUX_BUCKET" \
           -Denergy.import.command.directory=/import-data \
-          -jar quarkus-run.jar
+          -jar /deployments/quarkus-run.jar
         touch /import-state/imported
   grafana:
     container_name: grafana

@@ -20,6 +20,7 @@ COPY --from=build --chown=185 /workspace/target/quarkus-app/*.jar /deployments/
 COPY --from=build --chown=185 /workspace/target/quarkus-app/app/ /deployments/app/
 COPY --from=build --chown=185 /workspace/target/quarkus-app/quarkus/ /deployments/quarkus/
 
+WORKDIR /deployments
 EXPOSE 8080
 USER 185
 ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"

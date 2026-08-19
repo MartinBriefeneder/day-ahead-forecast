@@ -103,4 +103,4 @@ docker compose --profile server run --rm --no-deps \
   -Denergy.influx.write-batch-size="$ENERGY_IMPORT_WRITE_BATCH_SIZE" \
   -Denergy.influx.gzip-threshold-bytes="$ENERGY_IMPORT_GZIP_THRESHOLD_BYTES" \
   -Denergy.import.command.directory=/import-data \
-  -jar quarkus-run.jar
+  -jar /deployments/quarkus-run.jar
