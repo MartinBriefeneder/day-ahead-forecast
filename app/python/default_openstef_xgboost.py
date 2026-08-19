@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +13,6 @@ from forecast_runner import (
     DEFAULT_FORECAST_DAYS,
     DEFAULT_TARGET,
     DEFAULT_TRAIN_DAYS,
-    DEFAULT_TRAIN_START,
     HORIZON,
     OUTPUT_DIR,
     SAMPLE_INTERVAL,
@@ -24,6 +23,7 @@ from forecast_runner import (
     parse_utc,
     prediction_context_start,
     require_positive_int,
+    resolve_forecast_window,
     run_id_for_model,
 )
 from main import compute_metrics
@@ -191,8 +191,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a default OpenSTEF XGBoost forecast.")
     parser.add_argument("--base-url", default=BASE_URL)
     parser.add_argument("--target", default=DEFAULT_TARGET, choices=("generation", "consumption"))
-    parser.add_argument("--train-start", default=DEFAULT_TRAIN_START)
+    parser.add_argument("--train-start")
     parser.add_argument("--train-days", type=int, default=DEFAULT_TRAIN_DAYS)
+    parser.add_argument("--forecast-start", help="UTC ISO timestamp. Defaults to train-start plus train-days.")
     parser.add_argument("--forecast-days", type=int, default=DEFAULT_FORECAST_DAYS)
     parser.add_argument("--weather-path", default=str(DEFAULT_WEATHER_PATH))
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
@@ -201,12 +202,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    require_positive_int("train-days", args.train_days)
-    require_positive_int("forecast-days", args.forecast_days)
-    train_start = parse_utc(args.train_start)
-    train_end = train_start + timedelta(days=args.train_days)
-    forecast_start = train_end
-    forecast_end = forecast_start + timedelta(days=args.forecast_days)
+    train_start, train_end, forecast_start, forecast_end = resolve_forecast_window(
+        train_start=args.train_start,
+        train_days=args.train_days,
+        forecast_start=args.forecast_start,
+        forecast_days=args.forecast_days,
+    )
 
     dataset = fetch_forecast_dataset(
         base_url=args.base_url,

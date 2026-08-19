@@ -63,3 +63,31 @@ def require_positive_int(name: str, value: int) -> None:
 def prediction_context_start(forecast_start: datetime, context_days: int = DEFAULT_CONTEXT_DAYS) -> datetime:
     require_positive_int("context-days", context_days)
     return forecast_start - timedelta(days=context_days)
+
+
+def resolve_forecast_window(
+    *,
+    train_start: str | None,
+    train_days: int,
+    forecast_start: str | None,
+    forecast_days: int,
+) -> tuple[datetime, datetime, datetime, datetime]:
+    require_positive_int("train-days", train_days)
+    require_positive_int("forecast-days", forecast_days)
+    if forecast_start:
+        resolved_forecast_start = parse_utc(forecast_start)
+        resolved_train_start = parse_utc(train_start) if train_start else resolved_forecast_start - timedelta(days=train_days)
+        resolved_train_end = resolved_forecast_start
+    else:
+        resolved_train_start = parse_utc(train_start) if train_start else parse_utc(DEFAULT_TRAIN_START)
+        resolved_train_end = resolved_train_start + timedelta(days=train_days)
+        resolved_forecast_start = resolved_train_end
+
+    if not resolved_train_end > resolved_train_start:
+        raise ValueError("Training window must end after train-start")
+    return (
+        resolved_train_start,
+        resolved_train_end,
+        resolved_forecast_start,
+        resolved_forecast_start + timedelta(days=forecast_days),
+    )

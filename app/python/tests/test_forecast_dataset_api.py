@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pandas as pd
 import requests
 
-from forecast_dataset_api import fetch_forecast_dataframe
+from forecast_dataset_api import DEFAULT_TIMEOUT_SECONDS, fetch_forecast_dataframe
 
 
 class StubResponse:
@@ -32,12 +32,13 @@ def api_payload() -> dict:
 
 class ForecastDatasetApiTest(unittest.TestCase):
     def test_fetch_dataframe_stays_energy_only_by_default(self):
-        with patch("forecast_dataset_api.requests.get", return_value=StubResponse(api_payload())):
+        with patch("forecast_dataset_api.requests.get", return_value=StubResponse(api_payload())) as get:
             data = fetch_forecast_dataframe()
 
         self.assertEqual(["consumption"], list(data.columns))
         self.assertEqual(pd.Timestamp("2025-06-11T00:00:00Z"), data.index[0])
         self.assertNotIn("weather_diagnostics", data.attrs)
+        self.assertEqual(DEFAULT_TIMEOUT_SECONDS, get.call_args.kwargs["timeout"])
 
     def test_fetch_dataframe_adds_weather_only_when_requested(self):
         def add_weather(data, **kwargs):

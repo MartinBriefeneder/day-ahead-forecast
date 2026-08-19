@@ -4,6 +4,8 @@ from typing import Iterable
 import pandas as pd
 import requests
 
+DEFAULT_TIMEOUT_SECONDS = 120
+
 
 def _backend_connection_error(base_url: str) -> ConnectionError:
     return ConnectionError(
@@ -18,7 +20,7 @@ def fetch_forecast_dataframe(
     target: str = "consumption",
     start: str = "2025-06-01T00:00:00Z",
     end: str = "2025-07-20T00:00:00Z",
-    timeout_seconds: int = 30,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     include_weather: bool = False,
     weather_path: str | Path | None = None,
     weather_features: Iterable[str] | None = None,
@@ -66,7 +68,7 @@ def fetch_forecast_dataset(
     target: str = "consumption",
     start: str = "2025-06-01T00:00:00Z",
     end: str = "2025-07-20T00:00:00Z",
-    timeout_seconds: int = 30,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     include_weather: bool = False,
     weather_path: str | Path | None = None,
     weather_features: Iterable[str] | None = None,

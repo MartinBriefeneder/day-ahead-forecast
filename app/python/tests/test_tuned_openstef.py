@@ -92,7 +92,15 @@ class TunedOpenStefTest(unittest.TestCase):
         args = build_parser().parse_args(["--n-trials", "3"])
 
         self.assertEqual(3, args.n_trials)
+        self.assertIsNone(args.train_start)
+        self.assertIsNone(args.forecast_start)
         self.assertFalse(hasattr(args, "models"))
+
+    def test_parser_accepts_forecast_start_for_shared_batch_window(self):
+        args = build_parser().parse_args(["--forecast-start", "2025-09-09T00:00:00Z", "--forecast-days", "3"])
+
+        self.assertEqual("2025-09-09T00:00:00Z", args.forecast_start)
+        self.assertEqual(3, args.forecast_days)
 
 
 if __name__ == "__main__":

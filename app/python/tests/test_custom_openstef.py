@@ -141,8 +141,16 @@ class CustomOpenStefTest(unittest.TestCase):
         args = build_parser().parse_args([])
 
         self.assertEqual("generation", args.target)
+        self.assertIsNone(args.train_start)
+        self.assertIsNone(args.forecast_start)
         self.assertEqual("lgbm,gblinear", args.base_models)
         self.assertEqual("lgbm", args.combiner_model)
+
+    def test_parser_accepts_forecast_start_for_shared_batch_window(self):
+        args = build_parser().parse_args(["--forecast-start", "2025-09-09T00:00:00Z", "--forecast-days", "3"])
+
+        self.assertEqual("2025-09-09T00:00:00Z", args.forecast_start)
+        self.assertEqual(3, args.forecast_days)
 
 
 if __name__ == "__main__":

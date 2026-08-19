@@ -15,7 +15,7 @@ DEFAULT_OUTPUT = "all-python-forecast-comparison.html"
 TARGET = "generation"
 RUN_LIMIT = 100
 POINT_LIMIT = 10000
-TIMEOUT_SECONDS = 30
+TIMEOUT_SECONDS = 120
 
 
 def fetch_run_summaries(base_url: str, *, target: str | None, limit: int, timeout_seconds: int) -> list[dict[str, Any]]:
