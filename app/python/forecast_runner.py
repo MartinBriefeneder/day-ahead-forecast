@@ -67,6 +67,18 @@ def metric_items(metrics: dict[str, Any]) -> list[dict[str, float]]:
     ]
 
 
+def metric_summary(model: str, metrics: dict[str, Any]) -> str:
+    if metrics.get("aligned_intervals", 0):
+        return (
+            f"{model}: MAE={metrics['mae_kwh']:.4f} kWh, "
+            f"RMSE={metrics['rmse_kwh']:.4f} kWh, aligned={metrics['aligned_intervals']}"
+        )
+    return (
+        f"{model}: total forecast={metrics['total_forecast_kwh']:.4f} kWh, "
+        f"aligned=0, missing actual={metrics['missing_actual_intervals']}"
+    )
+
+
 def require_positive_int(name: str, value: int) -> None:
     if value <= 0:
         raise ValueError(f"{name} must be positive")

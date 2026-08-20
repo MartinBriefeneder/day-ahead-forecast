@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from forecast_dataset_api import fetch_forecast_dataset, save_forecast_run
+from default_openstef_xgboost import needs_future_prediction_data
 from forecast_runner import (
     BASE_URL,
     DEFAULT_FORECAST_DAYS,
@@ -21,6 +22,7 @@ from forecast_runner import (
     format_utc,
     forecast_start_is_future,
     metric_items,
+    metric_summary,
     none_if_nan,
     openstef_weather_config_kwargs,
     parse_utc,
@@ -262,7 +264,12 @@ def main(argv: list[str] | None = None) -> None:
         forecast_days=args.forecast_days,
     )
 
-    future_run = forecast_start_is_future(forecast_start)
+    future_run = needs_future_prediction_data(
+        base_url=args.base_url,
+        target=args.target,
+        forecast_start=forecast_start,
+        forecast_end=forecast_end,
+    )
     weather_features = FORECAST_WEATHER_FEATURES if future_run else WEATHER_FEATURES
     if future_run:
         train_dataset = time_series_dataset(
@@ -368,8 +375,8 @@ def main(argv: list[str] | None = None) -> None:
     save_payloads(payloads, base_url=args.base_url)
 
     print(f"Wrote tuning comparison plot to {plot_path}")
-    print(f"Default MAE: {default_metrics['mae_kwh']:.4f} kWh")
-    print(f"Tuned MAE:   {tuned_metrics['mae_kwh']:.4f} kWh")
+    print(metric_summary("openstef-xgboost-default", default_metrics))
+    print(metric_summary("openstef-xgboost-tuned", tuned_metrics))
     print(f"Best rCRPS:  {study.best_value:.4f}")
 
 

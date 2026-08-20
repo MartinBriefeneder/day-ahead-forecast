@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from forecast_dataset_api import fetch_forecast_dataset, save_forecast_run
+from forecast_dataset_api import fetch_forecast_dataframe
 from forecast_runner import (
     BASE_URL,
     DEFAULT_FORECAST_DAYS,
@@ -21,6 +22,7 @@ from forecast_runner import (
     format_utc,
     forecast_start_is_future,
     metric_items,
+    metric_summary,
     none_if_nan,
     openstef_weather_config_kwargs,
     parse_utc,
@@ -188,6 +190,19 @@ def save_payload(payload: dict[str, Any], *, base_url: str) -> None:
     print(f"Saved {response['runId']} to backend ({point_count} points, {metric_count} metrics)")
 
 
+def needs_future_prediction_data(*, base_url: str, target: str, forecast_start: datetime, forecast_end: datetime) -> bool:
+    if forecast_start_is_future(forecast_start):
+        return True
+    data = fetch_forecast_dataframe(
+        base_url=base_url,
+        target=target,
+        start=format_utc(forecast_start),
+        end=format_utc(forecast_end),
+    )
+    expected = pd.date_range(forecast_start, forecast_end, freq="15min", inclusive="left")
+    return len(data.dropna(subset=[target])) < len(expected)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a default OpenSTEF XGBoost forecast.")
     parser.add_argument("--base-url", default=BASE_URL)
@@ -210,7 +225,12 @@ def main(argv: list[str] | None = None) -> None:
         forecast_days=args.forecast_days,
     )
 
-    future_run = forecast_start_is_future(forecast_start)
+    future_run = needs_future_prediction_data(
+        base_url=args.base_url,
+        target=args.target,
+        forecast_start=forecast_start,
+        forecast_end=forecast_end,
+    )
     weather_features = FORECAST_WEATHER_FEATURES if future_run else WEATHER_FEATURES
     if future_run:
         train_dataset = time_series_dataset(
@@ -292,7 +312,7 @@ def main(argv: list[str] | None = None) -> None:
     save_payload(payload, base_url=args.base_url)
 
     print(f"Wrote default OpenSTEF XGBoost comparison plot to {plot_path}")
-    print(f"{MODEL_NAME}: MAE={metrics['mae_kwh']:.4f} kWh, RMSE={metrics['rmse_kwh']:.4f} kWh")
+    print(metric_summary(MODEL_NAME, metrics))
 
 
 if __name__ == "__main__":

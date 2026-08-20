@@ -162,7 +162,8 @@ def main(argv: list[str] | None = None) -> None:
 
     runs = attach_comparison_points(args.base_url, summaries, point_limit=args.point_limit, timeout_seconds=TIMEOUT_SECONDS)
     if not runs:
-        raise ValueError("Matching saved forecast runs have no comparison points")
+        print("Matching saved forecast runs have no comparison points; skipped comparison plot")
+        return
 
     output_path = Path(args.output_dir) / f"{args.target}-{DEFAULT_OUTPUT}"
     output_path.parent.mkdir(parents=True, exist_ok=True)
