@@ -15,6 +15,7 @@ class RunAllForecastsScriptTest(unittest.TestCase):
                 'python3 tuned_openstef.py "${common_args[@]}"',
                 'python3 custom_openstef.py "${common_args[@]}"',
                 'python3 compare_forecasts.py --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
+                'python3 compare_forecasts.py --target "$current_target" --all-saved',
             ],
             commands,
         )

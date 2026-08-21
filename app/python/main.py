@@ -103,6 +103,19 @@ def resolve_windows(args: argparse.Namespace) -> tuple[datetime, datetime, datet
     return train_start, forecast_start, forecast_start + horizon, horizon
 
 
+def resolve_data_query_end(
+    train_start: datetime,
+    forecast_start: datetime,
+    forecast_end: datetime,
+    train_days: int,
+    now: datetime | None = None,
+) -> datetime:
+    reference = datetime.now(timezone.utc) if now is None else now.astimezone(timezone.utc)
+    if forecast_start >= reference:
+        return min(train_start + timedelta(days=train_days), forecast_start)
+    return forecast_end
+
+
 def compute_metrics(forecast: pd.Series, actual: pd.Series) -> tuple[dict, pd.DataFrame]:
     comparison = pd.DataFrame({"forecast_kwh": forecast, "actual_kwh": actual.reindex(forecast.index)})
     comparison["error_kwh"] = comparison["forecast_kwh"] - comparison["actual_kwh"]
@@ -217,11 +230,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     train_start, forecast_start, forecast_end, horizon = resolve_windows(args)
+    data_query_end = resolve_data_query_end(train_start, forecast_start, forecast_end, args.train_days)
     data = fetch_forecast_dataframe(
         base_url=args.base_url,
         target=args.target,
         start=format_utc(train_start),
-        end=format_utc(forecast_end),
+        end=format_utc(data_query_end),
     )
     if data.empty:
         raise ValueError("Dataset is empty. Check that InfluxDB contains imported energy data for the selected range.")

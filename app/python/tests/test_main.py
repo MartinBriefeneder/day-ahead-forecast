@@ -1,6 +1,7 @@
 import unittest
+from datetime import datetime, timezone
 
-from main import backend_payload, build_parser, resolve_windows
+from main import backend_payload, build_parser, resolve_data_query_end, resolve_windows
 
 
 class MainForecastRunnerTest(unittest.TestCase):
@@ -59,6 +60,28 @@ class MainForecastRunnerTest(unittest.TestCase):
 
         self.assertEqual("2026-08-08T00:00:00+00:00", forecast_end.isoformat())
         self.assertEqual(3, horizon.days)
+
+    def test_future_forecast_queries_only_training_range(self):
+        query_end = resolve_data_query_end(
+            datetime(2025, 6, 1, tzinfo=timezone.utc),
+            datetime(2026, 8, 22, tzinfo=timezone.utc),
+            datetime(2026, 8, 29, tzinfo=timezone.utc),
+            train_days=90,
+            now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual("2025-08-30T00:00:00+00:00", query_end.isoformat())
+
+    def test_backtest_queries_through_forecast_end(self):
+        query_end = resolve_data_query_end(
+            datetime(2025, 6, 1, tzinfo=timezone.utc),
+            datetime(2025, 9, 1, tzinfo=timezone.utc),
+            datetime(2025, 9, 8, tzinfo=timezone.utc),
+            train_days=90,
+            now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual("2025-09-08T00:00:00+00:00", query_end.isoformat())
 
 if __name__ == "__main__":
     unittest.main()

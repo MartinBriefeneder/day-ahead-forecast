@@ -54,6 +54,7 @@ def select_summaries(
     target: str | None,
     forecast_start: str | None,
     forecast_end: str | None,
+    all_saved: bool = False,
 ) -> list[dict[str, Any]]:
     selected = [
         summary
@@ -62,6 +63,8 @@ def select_summaries(
         and (forecast_start is None or summary.get("forecastStart") == forecast_start)
         and (forecast_end is None or summary.get("forecastEnd") == forecast_end)
     ]
+    if all_saved:
+        return selected
     if forecast_start is not None or forecast_end is not None:
         return selected
 
@@ -104,16 +107,20 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
     target_label = str(first["target"]).capitalize()
     fig = go.Figure()
 
-    actual_run = next((run for run in runs if any(point.get("actualKwh") is not None for point in run["points"])), first)
-    actual_points = actual_run["points"]
-    actual_values = [point.get("actualKwh") for point in actual_points]
-    if any(value is not None for value in actual_values):
+    actual_windows: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for run in runs:
+        if any(point.get("actualKwh") is not None for point in run["points"]):
+            actual_windows.setdefault(group_key(run), run)
+
+    for run in actual_windows.values():
+        actual_points = run["points"]
+        actual_values = [point.get("actualKwh") for point in actual_points]
         fig.add_trace(
             go.Scatter(
                 x=[point["timestamp"] for point in actual_points],
                 y=actual_values,
                 mode="lines",
-                name=f"Actual {target_label}",
+                name=f"Actual {target_label} {window_label(run)}",
                 line={"color": "#111827", "width": 2},
             )
         )
@@ -124,7 +131,7 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
                 x=[point["timestamp"] for point in run["points"]],
                 y=[point.get("forecastKwh") for point in run["points"]],
                 mode="lines",
-                name=str(run.get("model")),
+                name=f"{run.get('model')} {window_label(run) if len(actual_windows) > 1 else ''}".strip(),
             )
         )
 
@@ -139,6 +146,10 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
     fig.write_html(output_path, include_plotlyjs=True)
 
 
+def window_label(run: dict[str, Any]) -> str:
+    return f"({run.get('forecastStart')} to {run.get('forecastEnd')})"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compare saved forecast runs for one target and forecast window.")
     parser.add_argument("--base-url", default=BASE_URL)
@@ -148,6 +159,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR))
     parser.add_argument("--run-limit", type=int, default=RUN_LIMIT)
     parser.add_argument("--point-limit", type=int, default=POINT_LIMIT)
+    parser.add_argument("--all-saved", action="store_true", help="Compare all saved runs for the selected target instead of one forecast window.")
     return parser
 
 
@@ -158,6 +170,7 @@ def main(argv: list[str] | None = None) -> None:
         target=args.target,
         forecast_start=args.forecast_start,
         forecast_end=args.forecast_end,
+        all_saved=args.all_saved,
     )
     if not summaries:
         raise ValueError("No matching saved forecast runs found")
@@ -169,7 +182,7 @@ def main(argv: list[str] | None = None) -> None:
 
     output_path = timestamped_report_path(
         Path(args.output_dir),
-        f"{args.target}-{DEFAULT_OUTPUT.removesuffix('.html')}",
+        f"{args.target}-{'all-saved-' if args.all_saved else ''}{DEFAULT_OUTPUT.removesuffix('.html')}",
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_comparison_figure(output_path, runs)
