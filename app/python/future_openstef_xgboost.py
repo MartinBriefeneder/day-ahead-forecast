@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -96,7 +97,7 @@ def build_training_frame(
     )
     data.attrs["weather_diagnostics"] = {"historical": diagnostics}
     data.attrs["target"] = target
-    return data
+    return numeric_openstef_frame(data, target)
 
 
 def build_prediction_frame(
@@ -133,16 +134,24 @@ def build_prediction_frame(
     )
     future_weather = complete_future_weather_frame(forecast_weather.data, forecast_start, forecast_end)
     future = future_weather.copy()
-    future[target] = pd.NA
+    future[target] = math.nan
     future = future[[target, *FUTURE_WEATHER_FEATURES]]
 
-    prediction = pd.concat([context, future]).sort_index()
+    prediction = numeric_openstef_frame(pd.concat([context, future]).sort_index(), target)
     prediction.attrs["target"] = target
     prediction.attrs["weather_diagnostics"] = {
         "historicalContext": context_diagnostics,
         "forecast": forecast_weather.metadata,
     }
     return prediction
+
+
+def numeric_openstef_frame(data: pd.DataFrame, target: str) -> pd.DataFrame:
+    data = data.copy()
+    for column in (target, *FUTURE_WEATHER_FEATURES):
+        if column in data.columns:
+            data[column] = pd.to_numeric(data[column], errors="coerce").astype("float64")
+    return data
 
 
 def complete_future_weather_frame(data: pd.DataFrame, forecast_start: datetime, forecast_end: datetime) -> pd.DataFrame:

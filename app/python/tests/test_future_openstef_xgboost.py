@@ -13,6 +13,7 @@ from future_openstef_xgboost import (
     build_parser,
     complete_future_weather_frame,
     next_quarter_hour,
+    numeric_openstef_frame,
     run_id,
     save_payload,
 )
@@ -89,6 +90,22 @@ class FutureOpenStefXGBoostTest(unittest.TestCase):
                 forecast_end=datetime(2026, 8, 19, 0, 15, tzinfo=timezone.utc),
                 forecast=forecast,
             )
+
+    def test_numeric_openstef_frame_converts_pandas_na_to_float_nan(self):
+        data = pd.DataFrame(
+            {
+                "generation": pd.Series([pd.NA], dtype="Float64"),
+                "temperature_2m": pd.Series([pd.NA], dtype="Float64"),
+                "wind_speed_10m": [2],
+                "shortwave_radiation": [0],
+            }
+        )
+
+        result = numeric_openstef_frame(data, "generation")
+
+        self.assertEqual("float64", str(result["generation"].dtype))
+        self.assertTrue(pd.isna(result.loc[0, "generation"]))
+        self.assertIsNot(pd.NA, result.loc[0, "generation"])
 
     def test_parser_defaults_to_next_week_future_weather_model(self):
         args = build_parser().parse_args([])
