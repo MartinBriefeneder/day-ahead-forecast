@@ -25,6 +25,7 @@ from forecast_runner import (
     prediction_context_start,
     require_positive_int,
     run_id_for_model,
+    timestamped_report_path,
 )
 from weather_features import DEFAULT_GRIDOO_LOCATION_ID, DEFAULT_WEATHER_PATH, add_weather_features, fetch_gridoo_forecast
 
@@ -218,7 +219,11 @@ def write_forecast_plot(output_dir: Path, payload: dict[str, Any]) -> Path:
     from plotly import graph_objects as go
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    plot_path = output_dir / "openstef-future-xgboost-forecast.html"
+    plot_path = timestamped_report_path(
+        output_dir,
+        f"{payload['target']}-openstef-future-xgboost-forecast",
+        generated_at=payload.get("generatedAt"),
+    )
     target_label = str(payload["target"]).capitalize()
     points = payload["points"]
 

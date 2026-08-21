@@ -86,7 +86,7 @@ class DefaultOpenStefXGBoostTest(unittest.TestCase):
             path = write_comparison_plot(Path(directory), payload, metadata)
             html = path.read_text(encoding="utf-8")
 
-        self.assertEqual("openstef-default-xgboost-comparison.html", path.name)
+        self.assertRegex(path.name, r"^generation-openstef-default-xgboost-comparison-\d{8}T\d{6}Z\.html$")
         self.assertIn("Default XGBoost Forecast vs Actual", html)
         self.assertIn("Time (UTC)", html)
         self.assertIn("Generation energy (kWh per 15-minute interval)", html)

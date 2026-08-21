@@ -1,6 +1,9 @@
 import unittest
+from datetime import datetime, timezone
+from pathlib import Path
 
 from compare_forecasts import build_parser, select_summaries
+from forecast_runner import report_timestamp, timestamped_report_path
 
 
 class CompareForecastsTest(unittest.TestCase):
@@ -34,6 +37,16 @@ class CompareForecastsTest(unittest.TestCase):
         selected = select_summaries(summaries, target="consumption", forecast_start=None, forecast_end=None)
 
         self.assertEqual(["consumption-run"], [summary["runId"] for summary in selected])
+
+    def test_timestamped_report_path_adds_utc_timestamp_to_filename(self):
+        path = timestamped_report_path(
+            Path("reports"),
+            "generation-all-python-forecast-comparison",
+            generated_at=datetime(2026, 8, 21, 12, 34, 56, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(Path("reports/generation-all-python-forecast-comparison-20260821T123456Z.html"), path)
+        self.assertEqual("20260821T123456Z", report_timestamp("2026-08-21T12:34:56Z"))
 
 
 if __name__ == "__main__":

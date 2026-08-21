@@ -53,6 +53,25 @@ def run_id_for_model(target: str, model: str, forecast_start: datetime) -> str:
     return f"{target}-{model}-{timestamp}"
 
 
+def report_timestamp(value: datetime | str | None = None) -> str:
+    if value is None:
+        parsed = datetime.now(timezone.utc)
+    elif isinstance(value, datetime):
+        parsed = value
+    else:
+        parsed = parse_utc(value)
+    return parsed.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def timestamped_report_path(
+    output_dir: Path,
+    stem: str,
+    suffix: str = ".html",
+    generated_at: datetime | str | None = None,
+) -> Path:
+    return output_dir / f"{stem}-{report_timestamp(generated_at)}{suffix}"
+
+
 def none_if_nan(value: object) -> float | None:
     if pd.isna(value):
         return None

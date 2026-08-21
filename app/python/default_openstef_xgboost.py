@@ -29,6 +29,7 @@ from forecast_runner import (
     prediction_context_start,
     resolve_forecast_window,
     run_id_for_model,
+    timestamped_report_path,
 )
 from future_openstef_xgboost import build_prediction_frame as build_future_prediction_frame
 from future_openstef_xgboost import build_training_frame as build_future_training_frame
@@ -140,7 +141,11 @@ def write_run_files(output_dir: Path, payload: dict[str, Any], metadata: dict[st
 def write_comparison_plot(output_dir: Path, payload: dict[str, Any], metadata: dict[str, Any]) -> Path:
     from plotly import graph_objects as go
 
-    plot_path = output_dir / "openstef-default-xgboost-comparison.html"
+    plot_path = timestamped_report_path(
+        output_dir,
+        f"{metadata['target']}-openstef-default-xgboost-comparison",
+        generated_at=metadata.get("generatedAt"),
+    )
     target_label = str(metadata["target"]).capitalize()
     points = payload["points"]
 

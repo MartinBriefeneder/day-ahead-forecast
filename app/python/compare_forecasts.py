@@ -8,6 +8,8 @@ from urllib.parse import quote
 
 import requests
 
+from forecast_runner import timestamped_report_path
+
 
 BASE_URL = "http://localhost:8080"
 OUTPUT_DIR = (Path(__file__).resolve().parent / "../reports/forecast-runs").resolve()
@@ -165,7 +167,10 @@ def main(argv: list[str] | None = None) -> None:
         print("Matching saved forecast runs have no comparison points; skipped comparison plot")
         return
 
-    output_path = Path(args.output_dir) / f"{args.target}-{DEFAULT_OUTPUT}"
+    output_path = timestamped_report_path(
+        Path(args.output_dir),
+        f"{args.target}-{DEFAULT_OUTPUT.removesuffix('.html')}",
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_comparison_figure(output_path, runs)
     print(f"Wrote {output_path} with {len(runs)} forecast runs")

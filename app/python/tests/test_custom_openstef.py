@@ -104,12 +104,11 @@ class CustomOpenStefTest(unittest.TestCase):
 
         with TemporaryDirectory() as directory:
             plot_path = write_run_files(Path(directory), payload, metadata)
-            plot = Path(directory) / "openstef-custom-ensemble-comparison.html"
-            plot_exists = plot.exists()
+            plot_exists = plot_path.exists()
             json_exists = (Path(directory) / "generation-openstef-custom-ensemble-20250909T000000Z.json").exists()
             markdown_exists = (Path(directory) / "openstef-custom-ensemble-report.md").exists()
 
-        self.assertEqual("openstef-custom-ensemble-comparison.html", plot_path.name)
+        self.assertRegex(plot_path.name, r"^generation-openstef-custom-ensemble-comparison-\d{8}T\d{6}Z\.html$")
         self.assertTrue(plot_exists)
         self.assertFalse(json_exists)
         self.assertFalse(markdown_exists)
@@ -131,7 +130,7 @@ class CustomOpenStefTest(unittest.TestCase):
             path = write_comparison_plot(Path(directory), payload, metadata)
             html = path.read_text(encoding="utf-8")
 
-        self.assertEqual("openstef-custom-ensemble-comparison.html", path.name)
+        self.assertRegex(path.name, r"^generation-openstef-custom-ensemble-comparison-\d{8}T\d{6}Z\.html$")
         self.assertIn("Custom OpenSTEF", html)
         self.assertIn("Time (UTC)", html)
         self.assertIn("Generation energy (kWh per 15-minute interval)", html)
