@@ -48,6 +48,11 @@ def format_utc(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def log_step(message: str) -> None:
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    print(f"[forecast-python] {timestamp} {message}", flush=True)
+
+
 def run_id_for_model(target: str, model: str, forecast_start: datetime) -> str:
     timestamp = forecast_start.strftime("%Y%m%dT%H%M%SZ")
     return f"{target}-{model}-{timestamp}"

@@ -21,6 +21,7 @@ from forecast_runner import (
     WEATHER_FEATURES,
     format_utc,
     forecast_start_is_future,
+    log_step,
     metric_items,
     metric_summary,
     none_if_nan,
@@ -268,7 +269,13 @@ def main(argv: list[str] | None = None) -> None:
         forecast_start=args.forecast_start,
         forecast_days=args.forecast_days,
     )
+    log_step(
+        f"openstef-xgboost-tuned batch start target={args.target} train_start={format_utc(train_start)} "
+        f"train_end={format_utc(train_end)} forecast_start={format_utc(forecast_start)} "
+        f"forecast_end={format_utc(forecast_end)} n_trials={args.n_trials}"
+    )
 
+    log_step("openstef-xgboost-tuned batch check forecast data availability")
     future_run = needs_future_prediction_data(
         base_url=args.base_url,
         target=args.target,
@@ -276,7 +283,9 @@ def main(argv: list[str] | None = None) -> None:
         forecast_end=forecast_end,
     )
     weather_features = FORECAST_WEATHER_FEATURES if future_run else WEATHER_FEATURES
+    log_step(f"openstef-xgboost-tuned batch data mode={'future' if future_run else 'backtest'} weather_features={','.join(weather_features)}")
     if future_run:
+        log_step("openstef-xgboost-tuned batch build future training frame")
         train_dataset = time_series_dataset(
             build_future_training_frame(
                 base_url=args.base_url,
@@ -286,6 +295,7 @@ def main(argv: list[str] | None = None) -> None:
                 weather_path=args.weather_path,
             )
         )
+        log_step("openstef-xgboost-tuned batch build future prediction frame")
         predict_dataset = time_series_dataset(
             build_future_prediction_frame(
                 base_url=args.base_url,
@@ -298,6 +308,7 @@ def main(argv: list[str] | None = None) -> None:
             )
         )
     else:
+        log_step("openstef-xgboost-tuned batch fetch backtest dataset with weather")
         dataset = fetch_forecast_dataset(
             base_url=args.base_url,
             target=args.target,
@@ -320,7 +331,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Training rows: {len(train_dataset.data):,}")
     print(f"Prediction rows: {len(predict_dataset.data):,}")
 
+    log_step("openstef-xgboost-default fit workflow")
     default_workflow, default_config, _ = fit_default(train_dataset, weather_features)
+    log_step("openstef-xgboost-default predict and build payload")
     default_payload, default_metrics = forecast_payload(
         workflow=default_workflow,
         model="openstef-xgboost-default",
@@ -333,12 +346,14 @@ def main(argv: list[str] | None = None) -> None:
         forecast_end=forecast_end,
     )
 
+    log_step("openstef-xgboost-tuned fit workflow with tuning")
     tuned_workflow, tuned_config, study = fit_tuned(
         train_dataset,
         n_trials=args.n_trials,
         show_progress_bar=not args.no_progress,
         weather_features=weather_features,
     )
+    log_step("openstef-xgboost-tuned predict and build payload")
     tuned_payload, tuned_metrics = forecast_payload(
         workflow=tuned_workflow,
         model="openstef-xgboost-tuned",
@@ -374,9 +389,11 @@ def main(argv: list[str] | None = None) -> None:
     }
 
     payloads = [default_payload, tuned_payload]
+    log_step("openstef-xgboost-tuned batch write report files")
     plot_path = write_run_files(Path(args.output_dir), payloads, metadata)
     for payload in payloads:
         payload["reportPath"] = str(plot_path)
+    log_step("openstef-xgboost-tuned batch save payloads")
     save_payloads(payloads, base_url=args.base_url)
 
     print(f"Wrote tuning comparison plot to {plot_path}")

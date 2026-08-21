@@ -66,12 +66,24 @@ fi
 forecast_end="$(python3 -c 'from datetime import datetime, timedelta, timezone; import sys; print((datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).astimezone(timezone.utc) + timedelta(days=int(sys.argv[2]))).isoformat().replace("+00:00", "Z"))' "$forecast_start" "$forecast_days")"
 
 cd "$script_dir/python"
+export PYTHONUNBUFFERED=1
+
+run_forecast_step() {
+  local label="$1"
+  shift
+  printf '[forecast-batch] start %s\n' "$label"
+  "$@"
+  printf '[forecast-batch] done %s\n' "$label"
+}
 
 if [ ! -d .venv ]; then
+  printf '[forecast-batch] create Python virtual environment\n'
   python3 -m venv .venv
 fi
 source .venv/bin/activate
+printf '[forecast-batch] install Python requirements\n'
 pip install -r requirements.txt
+printf '[forecast-batch] forecast_start=%s forecast_end=%s forecast_days=%s target=%s\n' "$forecast_start" "$forecast_end" "$forecast_days" "$target"
 
 for current_target in "${targets[@]}"; do
   common_args=(--target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")
@@ -79,10 +91,11 @@ for current_target in "${targets[@]}"; do
     common_args+=(--train-start "$train_start")
   fi
 
-  python3 main.py "${common_args[@]}" --save
-  python3 default_openstef_xgboost.py "${common_args[@]}"
-  python3 tuned_openstef.py "${common_args[@]}"
-  python3 custom_openstef.py "${common_args[@]}"
-  python3 compare_forecasts.py --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"
-  python3 compare_forecasts.py --target "$current_target" --all-saved
+  printf '[forecast-batch] target=%s\n' "$current_target"
+  run_forecast_step "weekly-persistence $current_target" python3 main.py "${common_args[@]}" --save
+  run_forecast_step "default-openstef-xgboost $current_target" python3 default_openstef_xgboost.py "${common_args[@]}"
+  run_forecast_step "tuned-openstef-xgboost $current_target" python3 tuned_openstef.py "${common_args[@]}"
+  run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"
+  run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"
+  run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --target "$current_target" --all-saved
 done

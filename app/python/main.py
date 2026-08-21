@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 from forecast_dataset_api import fetch_forecast_dataframe, save_forecast_run
+from forecast_runner import log_step
 
 BASE_URL = "http://localhost:8080"
 TARGET = "consumption"
@@ -239,12 +240,18 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     train_start, forecast_start, forecast_end, horizon = resolve_windows(args)
     data_query_end = resolve_data_query_end(train_start, forecast_start, forecast_end, args.train_days)
+    log_step(
+        f"weekly-persistence fetch target={args.target} train_start={format_utc(train_start)} "
+        f"forecast_start={format_utc(forecast_start)} forecast_end={format_utc(forecast_end)} "
+        f"data_query_end={format_utc(data_query_end)}"
+    )
     data = fetch_forecast_dataframe(
         base_url=args.base_url,
         target=args.target,
         start=format_utc(train_start),
         end=format_utc(data_query_end),
     )
+    log_step(f"weekly-persistence fetched rows={len(data):,}")
     if data.empty:
         raise ValueError("Dataset is empty. Check that InfluxDB contains imported energy data for the selected range.")
 
@@ -258,10 +265,12 @@ def main(argv: list[str] | None = None) -> None:
     payloads = []
     for model in MODELS:
         if model == "weekly-persistence":
+            log_step(f"{model} build forecast intervals={len(forecast_index):,}")
             forecast = weekly_persistence_forecast(actual, forecast_index)
         else:
             raise ValueError(f"Unknown model: {model}")
 
+        log_step(f"{model} compute metrics")
         metrics, comparison = compute_metrics(forecast, actual)
         payloads.append(
             report_payload(
@@ -281,6 +290,7 @@ def main(argv: list[str] | None = None) -> None:
 
     for payload in payloads:
         if args.save:
+            log_step(f"{payload['model']} save run_id={payload['runId']}")
             response = save_forecast_run(backend_payload(payload), base_url=args.base_url)
             point_count = response.get("forecastPoints", response.get("pointCount", len(payload["points"])))
             metric_count = response.get("metrics", response.get("metricCount", len(payload["metrics"])))

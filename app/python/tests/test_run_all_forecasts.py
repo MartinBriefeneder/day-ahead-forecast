@@ -6,16 +6,16 @@ class RunAllForecastsScriptTest(unittest.TestCase):
     def test_batch_runner_includes_future_forecast_before_comparison(self):
         script_path = Path(__file__).resolve().parents[2] / "run-all-forecasts.sh"
         lines = script_path.read_text(encoding="utf-8").splitlines()
-        commands = [line.strip() for line in lines if line.strip().startswith("python3 ") and ".py" in line]
+        commands = [line.strip() for line in lines if line.strip().startswith("run_forecast_step ") and ".py" in line]
 
         self.assertEqual(
             [
-                'python3 main.py "${common_args[@]}" --save',
-                'python3 default_openstef_xgboost.py "${common_args[@]}"',
-                'python3 tuned_openstef.py "${common_args[@]}"',
-                'python3 custom_openstef.py "${common_args[@]}"',
-                'python3 compare_forecasts.py --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
-                'python3 compare_forecasts.py --target "$current_target" --all-saved',
+                'run_forecast_step "weekly-persistence $current_target" python3 main.py "${common_args[@]}" --save',
+                'run_forecast_step "default-openstef-xgboost $current_target" python3 default_openstef_xgboost.py "${common_args[@]}"',
+                'run_forecast_step "tuned-openstef-xgboost $current_target" python3 tuned_openstef.py "${common_args[@]}"',
+                'run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"',
+                'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
+                'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --target "$current_target" --all-saved',
             ],
             commands,
         )
@@ -27,6 +27,7 @@ class RunAllForecastsScriptTest(unittest.TestCase):
         self.assertIn('--forecast-start ISO', script)
         self.assertIn('--forecast-days DAYS', script)
         self.assertIn('next-quarter-hour', script)
+        self.assertIn('export PYTHONUNBUFFERED=1', script)
         self.assertIn('common_args=(--target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")', script)
         self.assertIn('common_args+=(--train-start "$train_start")', script)
 

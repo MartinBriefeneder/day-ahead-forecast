@@ -21,6 +21,7 @@ from forecast_runner import (
     WEATHER_FEATURES,
     format_utc,
     forecast_start_is_future,
+    log_step,
     metric_items,
     metric_summary,
     none_if_nan,
@@ -243,7 +244,14 @@ def main(argv: list[str] | None = None) -> None:
         forecast_days=args.forecast_days,
     )
     base_models = parse_base_models(args.base_models)
+    log_step(
+        f"{MODEL_NAME} start target={args.target} train_start={format_utc(train_start)} "
+        f"train_end={format_utc(train_end)} forecast_start={format_utc(forecast_start)} "
+        f"forecast_end={format_utc(forecast_end)} base_models={','.join(base_models)} "
+        f"combiner_model={args.combiner_model} ensemble_type={args.ensemble_type}"
+    )
 
+    log_step(f"{MODEL_NAME} check forecast data availability")
     future_run = needs_future_prediction_data(
         base_url=args.base_url,
         target=args.target,
@@ -251,7 +259,9 @@ def main(argv: list[str] | None = None) -> None:
         forecast_end=forecast_end,
     )
     weather_features = FORECAST_WEATHER_FEATURES if future_run else WEATHER_FEATURES
+    log_step(f"{MODEL_NAME} data mode={'future' if future_run else 'backtest'} weather_features={','.join(weather_features)}")
     if future_run:
+        log_step(f"{MODEL_NAME} build future training frame")
         train_dataset = time_series_dataset(
             build_future_training_frame(
                 base_url=args.base_url,
@@ -261,6 +271,7 @@ def main(argv: list[str] | None = None) -> None:
                 weather_path=args.weather_path,
             )
         )
+        log_step(f"{MODEL_NAME} build future prediction frame")
         predict_dataset = time_series_dataset(
             build_future_prediction_frame(
                 base_url=args.base_url,
@@ -273,6 +284,7 @@ def main(argv: list[str] | None = None) -> None:
             )
         )
     else:
+        log_step(f"{MODEL_NAME} fetch backtest dataset with weather")
         dataset = fetch_forecast_dataset(
             base_url=args.base_url,
             target=args.target,
@@ -294,6 +306,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Training rows: {len(train_dataset.data):,}")
     print(f"Prediction rows: {len(predict_dataset.data):,}")
 
+    log_step(f"{MODEL_NAME} create workflow")
     workflow, _ = create_custom_workflow(
         args.target,
         base_models=base_models,
@@ -301,9 +314,11 @@ def main(argv: list[str] | None = None) -> None:
         ensemble_type=args.ensemble_type,
         weather_features=weather_features,
     )
+    log_step(f"{MODEL_NAME} fit workflow")
     fit_result = workflow.fit(train_dataset)
 
     generated_at = datetime.now(timezone.utc)
+    log_step(f"{MODEL_NAME} predict and build payload")
     payload, metrics = forecast_payload(
         workflow=workflow,
         target=args.target,
@@ -336,8 +351,10 @@ def main(argv: list[str] | None = None) -> None:
         "validationMetrics": validation_metrics(fit_result),
     }
 
+    log_step(f"{MODEL_NAME} write report files")
     plot_path = write_run_files(Path(args.output_dir), payload, metadata)
     payload["reportPath"] = str(plot_path)
+    log_step(f"{MODEL_NAME} save run_id={payload['runId']}")
     save_payload(payload, base_url=args.base_url)
 
     print(f"Wrote custom OpenSTEF comparison plot to {plot_path}")
