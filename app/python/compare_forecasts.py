@@ -17,10 +17,10 @@ DEFAULT_OUTPUT = "all-python-forecast-comparison.html"
 TARGET = "generation"
 RUN_LIMIT = 100
 POINT_LIMIT = 10000
-TIMEOUT_SECONDS = 120
+TIMEOUT_SECONDS = None
 
 
-def fetch_run_summaries(base_url: str, *, target: str | None, limit: int, timeout_seconds: int) -> list[dict[str, Any]]:
+def fetch_run_summaries(base_url: str, *, target: str | None, limit: int, timeout_seconds: int | None) -> list[dict[str, Any]]:
     params: dict[str, str | int] = {"limit": limit}
     if target is not None:
         params["target"] = target
@@ -29,7 +29,7 @@ def fetch_run_summaries(base_url: str, *, target: str | None, limit: int, timeou
     return response.json()
 
 
-def fetch_comparison(base_url: str, run_id: str, *, limit: int, timeout_seconds: int) -> list[dict[str, Any]]:
+def fetch_comparison(base_url: str, run_id: str, *, limit: int, timeout_seconds: int | None) -> list[dict[str, Any]]:
     response = requests.get(
         f"{base_url}/api/forecast-runs/{quote(run_id, safe='')}/comparison",
         params={"limit": limit},
@@ -86,7 +86,7 @@ def attach_comparison_points(
     summaries: list[dict[str, Any]],
     *,
     point_limit: int,
-    timeout_seconds: int,
+    timeout_seconds: int | None,
 ) -> list[dict[str, Any]]:
     runs = []
     for summary in summaries:
