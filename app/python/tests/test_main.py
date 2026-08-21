@@ -1,6 +1,8 @@
 import unittest
 from datetime import datetime, timezone
 
+import pandas as pd
+
 from main import backend_payload, build_parser, resolve_data_query_end, resolve_windows
 
 
@@ -21,7 +23,7 @@ class MainForecastRunnerTest(unittest.TestCase):
     def test_backend_payload_converts_metric_dict_to_items(self):
         payload = {
             "runId": "run-1",
-            "metrics": {"mae_kwh": 0.5, "note": "ignored"},
+            "metrics": {"mae_kwh": 0.5, "missing": pd.NA, "note": "ignored"},
             "points": [],
         }
 

@@ -1,6 +1,8 @@
 import unittest
 
-from forecast_runner import FORECAST_WEATHER_FEATURES, openstef_weather_config_kwargs, resolve_forecast_window
+import pandas as pd
+
+from forecast_runner import FORECAST_WEATHER_FEATURES, metric_items, none_if_nan, openstef_weather_config_kwargs, resolve_forecast_window
 
 
 class ForecastRunnerTest(unittest.TestCase):
@@ -51,6 +53,15 @@ class ForecastRunnerTest(unittest.TestCase):
                 "radiation_column": "shortwave_radiation",
             },
             openstef_weather_config_kwargs(FORECAST_WEATHER_FEATURES),
+        )
+
+    def test_none_if_nan_handles_pandas_missing_values(self):
+        self.assertIsNone(none_if_nan(pd.NA))
+
+    def test_metric_items_skips_pandas_missing_values(self):
+        self.assertEqual(
+            [{"name": "mae_kwh", "value": 0.5}],
+            metric_items({"mae_kwh": 0.5, "missing": pd.NA, "note": "ignored"}),
         )
 
 

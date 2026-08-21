@@ -206,7 +206,7 @@ def write_comparison_plot(output_dir: Path, payload: dict[str, Any], metadata: d
 
 
 def format_metric(value: object) -> str:
-    if value is None:
+    if value is None or pd.isna(value):
         return ""
     return f"{float(value):.4f}"
 

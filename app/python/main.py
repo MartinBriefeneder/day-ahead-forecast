@@ -195,18 +195,26 @@ def report_payload(
 def backend_payload(payload: dict) -> dict:
     return {
         **payload,
-        "metrics": [
-            {"name": name, "value": float(value)}
-            for name, value in payload["metrics"].items()
-            if isinstance(value, int | float) and pd.notna(value)
-        ],
+        "metrics": metric_items(payload["metrics"]),
     }
 
 
 def none_if_nan(value: object) -> float | None:
-    if pd.isna(value):
+    if value is None or pd.isna(value):
         return None
     return float(value)
+
+
+def metric_items(metrics: dict) -> list[dict[str, float]]:
+    items = []
+    for name, value in metrics.items():
+        try:
+            numeric_value = none_if_nan(value)
+        except (TypeError, ValueError):
+            continue
+        if numeric_value is not None:
+            items.append({"name": name, "value": numeric_value})
+    return items
 
 
 def build_run_id(target: str, model: str, forecast_start: datetime) -> str:

@@ -73,17 +73,21 @@ def timestamped_report_path(
 
 
 def none_if_nan(value: object) -> float | None:
-    if pd.isna(value):
+    if value is None or pd.isna(value):
         return None
     return float(value)
 
 
 def metric_items(metrics: dict[str, Any]) -> list[dict[str, float]]:
-    return [
-        {"name": name, "value": float(value)}
-        for name, value in metrics.items()
-        if isinstance(value, int | float) and pd.notna(value)
-    ]
+    items = []
+    for name, value in metrics.items():
+        try:
+            numeric_value = none_if_nan(value)
+        except (TypeError, ValueError):
+            continue
+        if numeric_value is not None:
+            items.append({"name": name, "value": numeric_value})
+    return items
 
 
 def metric_summary(model: str, metrics: dict[str, Any]) -> str:
