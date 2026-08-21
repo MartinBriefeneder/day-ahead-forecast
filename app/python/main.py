@@ -119,6 +119,8 @@ def resolve_data_query_end(
 
 def compute_metrics(forecast: pd.Series, actual: pd.Series) -> tuple[dict, pd.DataFrame]:
     comparison = pd.DataFrame({"forecast_kwh": forecast, "actual_kwh": actual.reindex(forecast.index)})
+    comparison["forecast_kwh"] = pd.to_numeric(comparison["forecast_kwh"], errors="coerce")
+    comparison["actual_kwh"] = pd.to_numeric(comparison["actual_kwh"], errors="coerce")
     comparison["error_kwh"] = comparison["forecast_kwh"] - comparison["actual_kwh"]
     aligned = comparison.dropna(subset=["forecast_kwh", "actual_kwh"])
 

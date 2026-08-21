@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from main import backend_payload, build_parser, resolve_data_query_end, resolve_windows
+from main import backend_payload, build_parser, compute_metrics, resolve_data_query_end, resolve_windows
 
 
 class MainForecastRunnerTest(unittest.TestCase):
@@ -30,6 +30,19 @@ class MainForecastRunnerTest(unittest.TestCase):
         result = backend_payload(payload)
 
         self.assertEqual([{"name": "mae_kwh", "value": 0.5}], result["metrics"])
+
+    def test_compute_metrics_coerces_pandas_missing_values(self):
+        index = pd.date_range("2025-09-09T00:00:00Z", periods=2, freq="15min")
+        forecast = pd.Series([pd.NA, 1.5], index=index, dtype="Float64")
+        actual = pd.Series([1.0, 1.0], index=index, dtype="Float64")
+
+        metrics, comparison = compute_metrics(forecast, actual)
+
+        self.assertEqual(2, metrics["forecast_intervals"])
+        self.assertEqual(1, metrics["aligned_intervals"])
+        self.assertEqual(1.5, metrics["total_forecast_kwh"])
+        self.assertEqual(0.5, metrics["mae_kwh"])
+        self.assertTrue(pd.isna(comparison.iloc[0].forecast_kwh))
 
     def test_forecast_start_defaults_training_window_to_previous_train_days(self):
         args = build_parser().parse_args([
