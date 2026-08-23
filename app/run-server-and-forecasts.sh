@@ -9,6 +9,9 @@ timeout_seconds="${FORECAST_STACK_TIMEOUT_SECONDS:-180}"
 data_timeout_seconds="${FORECAST_DATA_TIMEOUT_SECONDS:-120}"
 data_chunk_hours="${FORECAST_DATA_CHUNK_HOURS:-24}"
 runner_mode="${FORECAST_RUNNER_MODE:-docker}"
+strict_data_preflight="${FORECAST_STRICT_DATA_PREFLIGHT:-0}"
+min_training_days="${FORECAST_MIN_TRAINING_DAYS:-14}"
+import_verify_timeout_seconds="${FORECAST_IMPORT_VERIFY_TIMEOUT_SECONDS:-300}"
 reset_and_import="${FORECAST_RESET_AND_IMPORT:-0}"
 forecast_args=()
 target="all"
@@ -22,6 +25,7 @@ usage() {
   printf 'Starts Docker background services, waits for the backend, then runs all forecasts.\n'
   printf 'Pass forecast options such as --target, --train-start, --train-days, --forecast-start, and --forecast-days.\n'
   printf 'Set FORECAST_RUNNER_MODE=host to use the host Python virtual environment instead of Docker.\n'
+  printf 'Set FORECAST_STRICT_DATA_PREFLIGHT=1 to require complete requested training windows.\n'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -143,7 +147,7 @@ PY
 }
 
 preflight_forecast_data() {
-  python3 - "$backend_url" "$target" "$train_start" "$train_days" "$forecast_start" "$forecast_days" "$data_timeout_seconds" "$data_chunk_hours" <<'PY'
+  python3 - "$backend_url" "$target" "$train_start" "$train_days" "$forecast_start" "$forecast_days" "$data_timeout_seconds" "$data_chunk_hours" "$strict_data_preflight" "$min_training_days" <<'PY'
 from datetime import datetime, timedelta, timezone
 import json
 import sys
@@ -159,6 +163,8 @@ forecast_start = datetime.fromisoformat(sys.argv[5].replace("Z", "+00:00")).asti
 forecast_days = int(sys.argv[6])
 data_timeout_seconds = int(sys.argv[7])
 data_chunk_hours = int(sys.argv[8])
+strict_data_preflight = sys.argv[9] in {"1", "true", "TRUE", "yes", "YES"}
+min_training_days = int(sys.argv[10])
 targets = ("generation", "consumption") if target_arg == "all" else (target_arg,)
 now = datetime.now(timezone.utc)
 
@@ -192,6 +198,9 @@ def fetch_points(target, start, end):
 
 def expected_intervals(start, end):
     return int((end - start).total_seconds() // (15 * 60))
+
+def minimum_intervals(expected):
+    return min(expected, min_training_days * 96)
 
 def fetch_range_in_chunks(target, start, end):
     chunk_size = timedelta(hours=data_chunk_hours)
@@ -244,22 +253,43 @@ for target in targets:
     ):
         points, first_timestamp, last_timestamp, missing_chunks = fetch_range_in_chunks(target, start, end)
         expected = expected_intervals(start, end)
+        minimum = minimum_intervals(expected)
         print(
             f"[forecast-setup] data {target} {label}: "
-            f"rows={len(points)}/{expected} start={format_utc(start)} end={format_utc(end)} "
+            f"rows={len(points)}/{expected} minimum={minimum} start={format_utc(start)} end={format_utc(end)} "
             f"first={first_timestamp} last={last_timestamp}",
             flush=True,
         )
         if len(points) < expected:
-            failures.append(f"{target} {label} has {len(points)} rows, expected {expected}")
+            print(
+                f"[forecast-setup] warning {target} {label}: incomplete requested window; forecasts will continue with available rows",
+                flush=True,
+            )
             for missing_chunk in missing_chunks[:10]:
                 print(f"[forecast-setup] missing {target} {label}: {missing_chunk}", flush=True)
             if len(missing_chunks) > 10:
                 print(f"[forecast-setup] missing {target} {label}: ... {len(missing_chunks) - 10} more chunks", flush=True)
+            if strict_data_preflight:
+                failures.append(f"{target} {label} has {len(points)} rows, expected {expected}")
+        if len(points) < minimum:
+            failures.append(f"{target} {label} has {len(points)} rows, minimum required is {minimum}")
 
 if failures:
     raise SystemExit("Imported data preflight failed: " + "; ".join(failures))
 PY
+}
+
+wait_for_forecast_data() {
+  local started_at
+  started_at="$(date +%s)"
+  until preflight_forecast_data; do
+    if [ $(( $(date +%s) - started_at )) -ge "$import_verify_timeout_seconds" ]; then
+      printf '[forecast-setup] timed out waiting for usable imported data after %s seconds\n' "$import_verify_timeout_seconds" >&2
+      exit 1
+    fi
+    printf '[forecast-setup] imported data not usable yet; retrying\n'
+    sleep 5
+  done
 }
 
 case "$target" in
@@ -290,7 +320,7 @@ printf '[forecast-setup] wait for backend at %s\n' "$backend_url"
 wait_for_backend
 
 printf '[forecast-setup] preflight imported forecast data\n'
-preflight_forecast_data
+wait_for_forecast_data
 
 printf '[forecast-setup] backend and data checks passed\n'
 case "$runner_mode" in
