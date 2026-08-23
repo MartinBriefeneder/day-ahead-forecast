@@ -90,17 +90,6 @@ if should_build_backend; then
 fi
 
 printf 'Importing CSV files from %s\n' "$IMPORT_DIR"
-docker compose --profile server run --rm --no-deps \
+docker compose --profile import run --rm \
   --volume "$IMPORT_DIR:/import-data:ro" \
-  --entrypoint java \
-  backend \
-  -Dquarkus.http.host=127.0.0.1 \
-  -Dquarkus.http.port=0 \
-  -Denergy.influx.token="$INFLUXDB_TOKEN" \
-  -Denergy.influx.url=http://influxdb:8086 \
-  -Denergy.influx.org="$INFLUXDB_ORG" \
-  -Denergy.influx.bucket="$INFLUXDB_BUCKET" \
-  -Denergy.influx.write-batch-size="$ENERGY_IMPORT_WRITE_BATCH_SIZE" \
-  -Denergy.influx.gzip-threshold-bytes="$ENERGY_IMPORT_GZIP_THRESHOLD_BYTES" \
-  -Denergy.import.command.directory=/import-data \
-  -jar /deployments/quarkus-run.jar
+  importer

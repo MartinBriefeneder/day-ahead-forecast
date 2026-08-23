@@ -63,14 +63,13 @@ services:
       ENERGY_INFLUX_BUCKET: ${INFLUXDB_BUCKET:-energy}
       ENERGY_INFLUX_MEASUREMENT: energy_values
       ENERGY_INFLUX_TOKEN: ${INFLUXDB_TOKEN:?export INFLUXDB_TOKEN before running docker compose up}
+      ENERGY_IMPORT_WRITE_BATCH_SIZE: ${ENERGY_IMPORT_WRITE_BATCH_SIZE:-5000}
+      ENERGY_IMPORT_GZIP_THRESHOLD_BYTES: ${ENERGY_IMPORT_GZIP_THRESHOLD_BYTES:-1048576}
     volumes:
       - type: bind
         source: ./quarkus/data/csv_Archiv
         target: /import-data
         read_only: true
-      - type: volume
-        source: import-state
-        target: /import-state
     depends_on:
       influxdb:
         condition: service_healthy
@@ -78,19 +77,17 @@ services:
       - /bin/sh
       - -c
       - |
-        if [ -f /import-state/imported ]; then
-          echo 'CSV data already imported.'
-          exit 0
-        fi
         java \
           -Dquarkus.http.host=127.0.0.1 \
           -Dquarkus.http.port=0 \
           -Denergy.influx.token="$$ENERGY_INFLUX_TOKEN" \
+          -Denergy.influx.url="$$ENERGY_INFLUX_URL" \
           -Denergy.influx.org="$$ENERGY_INFLUX_ORG" \
           -Denergy.influx.bucket="$$ENERGY_INFLUX_BUCKET" \
+          -Denergy.influx.write-batch-size="$$ENERGY_IMPORT_WRITE_BATCH_SIZE" \
+          -Denergy.influx.gzip-threshold-bytes="$$ENERGY_IMPORT_GZIP_THRESHOLD_BYTES" \
           -Denergy.import.command.directory=/import-data \
           -jar /deployments/quarkus-run.jar
-        touch /import-state/imported
   forecast-runner:
     profiles:
       - forecasts
@@ -140,4 +137,3 @@ volumes:
   influxdb2-data:
   influxdb2-config:
   grafana-data:
-  import-state:

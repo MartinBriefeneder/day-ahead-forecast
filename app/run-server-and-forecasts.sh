@@ -4,6 +4,19 @@ set -euo pipefail
 script_dir="$(CDPATH= cd "$(dirname "$0")" && pwd)"
 cd "$script_dir"
 
+DEFAULT_INFLUXDB_TOKEN="apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg"
+
+if [ -f ./.env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
+: "${INFLUXDB_TOKEN:=$DEFAULT_INFLUXDB_TOKEN}"
+: "${INFLUXDB_ORG:=kirchdorf}"
+: "${INFLUXDB_BUCKET:=energy}"
+export INFLUXDB_TOKEN INFLUXDB_ORG INFLUXDB_BUCKET
+
 backend_url="${FORECAST_BACKEND_URL:-http://localhost:8080}"
 timeout_seconds="${FORECAST_STACK_TIMEOUT_SECONDS:-180}"
 data_timeout_seconds="${FORECAST_DATA_TIMEOUT_SECONDS:-120}"
@@ -133,6 +146,14 @@ PY
     fi
     sleep 1
   done
+}
+
+start_server_stack() {
+  mkdir -p ./reports/forecast-runs
+  docker compose --profile server up -d --build --remove-orphans
+  printf '[forecast-setup] backend: %s\n' "$backend_url"
+  printf '[forecast-setup] grafana: http://localhost:3000\n'
+  printf '[forecast-setup] influxdb: http://localhost:8086\n'
 }
 
 resolve_default_forecast_start() {
@@ -307,13 +328,13 @@ if [ -z "$forecast_start" ]; then
 fi
 
 printf '[forecast-setup] start Docker background services\n'
-./run-server.sh
+start_server_stack
 
 if [ "$reset_and_import" = "1" ]; then
   printf '[forecast-setup] reset and import CSV data\n'
   ./reset-and-import-data.sh
   printf '[forecast-setup] restart backend after import\n'
-  ./run-server.sh
+  start_server_stack
 fi
 
 printf '[forecast-setup] wait for backend at %s\n' "$backend_url"
