@@ -7,9 +7,10 @@ train_days="90"
 forecast_start=""
 forecast_days="7"
 target="all"
+base_url="${FORECAST_BACKEND_URL:-http://localhost:8080}"
 
 usage() {
-  printf 'Usage: %s [--target generation|consumption|all] [--train-start ISO] [--train-days DAYS] [--forecast-start ISO] [--forecast-days DAYS]\n' "$0"
+  printf 'Usage: %s [--target generation|consumption|all] [--base-url URL] [--train-start ISO] [--train-days DAYS] [--forecast-start ISO] [--forecast-days DAYS]\n' "$0"
   printf 'Defaults: --target all --train-days 90 --forecast-start next-quarter-hour --forecast-days 7\n'
 }
 
@@ -17,6 +18,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --target)
       target="$2"
+      shift 2
+      ;;
+    --base-url)
+      base_url="$2"
       shift 2
       ;;
     --train-start)
@@ -76,17 +81,21 @@ run_forecast_step() {
   printf '[forecast-batch] done %s\n' "$label"
 }
 
-if [ ! -d .venv ]; then
-  printf '[forecast-batch] create Python virtual environment\n'
-  python3 -m venv .venv
+if [ "${FORECAST_SKIP_VENV:-0}" != "1" ]; then
+  if [ ! -d .venv ]; then
+    printf '[forecast-batch] create Python virtual environment\n'
+    python3 -m venv .venv
+  fi
+  source .venv/bin/activate
+  printf '[forecast-batch] install Python requirements\n'
+  pip install -r requirements.txt
+else
+  printf '[forecast-batch] use container Python environment\n'
 fi
-source .venv/bin/activate
-printf '[forecast-batch] install Python requirements\n'
-pip install -r requirements.txt
-printf '[forecast-batch] forecast_start=%s forecast_end=%s forecast_days=%s target=%s\n' "$forecast_start" "$forecast_end" "$forecast_days" "$target"
+printf '[forecast-batch] forecast_start=%s forecast_end=%s forecast_days=%s target=%s base_url=%s\n' "$forecast_start" "$forecast_end" "$forecast_days" "$target" "$base_url"
 
 for current_target in "${targets[@]}"; do
-  common_args=(--target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")
+  common_args=(--base-url "$base_url" --target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")
   if [ -n "$train_start" ]; then
     common_args+=(--train-start "$train_start")
   fi
@@ -96,6 +105,6 @@ for current_target in "${targets[@]}"; do
   run_forecast_step "default-openstef-xgboost $current_target" python3 default_openstef_xgboost.py "${common_args[@]}"
   run_forecast_step "tuned-openstef-xgboost $current_target" python3 tuned_openstef.py "${common_args[@]}"
   run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"
-  run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"
-  run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --target "$current_target" --all-saved
+  run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"
+  run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved
 done

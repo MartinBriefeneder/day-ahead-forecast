@@ -14,8 +14,8 @@ class RunAllForecastsScriptTest(unittest.TestCase):
                 'run_forecast_step "default-openstef-xgboost $current_target" python3 default_openstef_xgboost.py "${common_args[@]}"',
                 'run_forecast_step "tuned-openstef-xgboost $current_target" python3 tuned_openstef.py "${common_args[@]}"',
                 'run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"',
-                'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
-                'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --target "$current_target" --all-saved',
+                'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
+                'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved',
             ],
             commands,
         )
@@ -28,7 +28,8 @@ class RunAllForecastsScriptTest(unittest.TestCase):
         self.assertIn('--forecast-days DAYS', script)
         self.assertIn('next-quarter-hour', script)
         self.assertIn('export PYTHONUNBUFFERED=1', script)
-        self.assertIn('common_args=(--target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")', script)
+        self.assertIn('--base-url URL', script)
+        self.assertIn('common_args=(--base-url "$base_url" --target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")', script)
         self.assertIn('common_args+=(--train-start "$train_start")', script)
 
 

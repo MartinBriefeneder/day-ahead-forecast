@@ -91,6 +91,23 @@ services:
           -Denergy.import.command.directory=/import-data \
           -jar /deployments/quarkus-run.jar
         touch /import-state/imported
+  forecast-runner:
+    profiles:
+      - forecasts
+    image: day-ahead-forecast-python
+    build:
+      context: .
+      dockerfile: python/Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - type: bind
+        source: ./data
+        target: /app/data
+        read_only: true
+      - type: bind
+        source: ./reports
+        target: /app/reports
   grafana:
     container_name: grafana
     image: grafana/grafana

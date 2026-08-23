@@ -7,6 +7,8 @@ cd "$script_dir"
 backend_url="${FORECAST_BACKEND_URL:-http://localhost:8080}"
 timeout_seconds="${FORECAST_STACK_TIMEOUT_SECONDS:-180}"
 data_timeout_seconds="${FORECAST_DATA_TIMEOUT_SECONDS:-120}"
+data_chunk_hours="${FORECAST_DATA_CHUNK_HOURS:-24}"
+runner_mode="${FORECAST_RUNNER_MODE:-docker}"
 reset_and_import="${FORECAST_RESET_AND_IMPORT:-0}"
 forecast_args=()
 target="all"
@@ -19,6 +21,7 @@ usage() {
   printf 'Usage: %s [--reset-and-import] [run-all-forecasts options]\n' "$0"
   printf 'Starts Docker background services, waits for the backend, then runs all forecasts.\n'
   printf 'Pass forecast options such as --target, --train-start, --train-days, --forecast-start, and --forecast-days.\n'
+  printf 'Set FORECAST_RUNNER_MODE=host to use the host Python virtual environment instead of Docker.\n'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -65,7 +68,9 @@ done
 
 wait_for_backend() {
   local started_at
+  local consecutive_successes
   started_at="$(date +%s)"
+  consecutive_successes=0
   until python3 - "$backend_url" <<'PY'
 import json
 import sys
@@ -84,6 +89,7 @@ except Exception as exc:
     sys.exit(1)
 PY
   do
+    consecutive_successes=0
     if [ $(( $(date +%s) - started_at )) -ge "$timeout_seconds" ]; then
       printf '[forecast-setup] timed out waiting for backend at %s after %s seconds\n' "$backend_url" "$timeout_seconds" >&2
       docker compose --profile server ps >&2 || true
@@ -91,6 +97,37 @@ PY
       exit 1
     fi
     sleep 2
+  done
+
+  while [ "$consecutive_successes" -lt 2 ]; do
+    if python3 - "$backend_url" <<'PY'
+import json
+import sys
+from urllib.parse import urlencode
+from urllib.request import urlopen
+
+base_url = sys.argv[1].rstrip("/")
+params = urlencode({"target": "generation", "from": "2025-06-11T00:00:00Z", "to": "2025-06-11T00:15:00Z"})
+try:
+    with urlopen(f"{base_url}/api/forecast-datasets?{params}", timeout=5) as response:
+        payload = json.load(response)
+    if "points" not in payload:
+        raise RuntimeError("response does not contain points")
+except Exception as exc:
+    print(f"Backend not stable yet: {exc}")
+    sys.exit(1)
+PY
+    then
+      consecutive_successes=$((consecutive_successes + 1))
+    else
+      consecutive_successes=0
+    fi
+    if [ $(( $(date +%s) - started_at )) -ge "$timeout_seconds" ]; then
+      printf '[forecast-setup] timed out waiting for stable backend at %s after %s seconds\n' "$backend_url" "$timeout_seconds" >&2
+      docker compose --profile server logs --tail=80 backend >&2 || true
+      exit 1
+    fi
+    sleep 1
   done
 }
 
@@ -106,7 +143,7 @@ PY
 }
 
 preflight_forecast_data() {
-  python3 - "$backend_url" "$target" "$train_start" "$train_days" "$forecast_start" "$forecast_days" "$data_timeout_seconds" <<'PY'
+  python3 - "$backend_url" "$target" "$train_start" "$train_days" "$forecast_start" "$forecast_days" "$data_timeout_seconds" "$data_chunk_hours" <<'PY'
 from datetime import datetime, timedelta, timezone
 import json
 import sys
@@ -121,6 +158,7 @@ train_days = int(sys.argv[4])
 forecast_start = datetime.fromisoformat(sys.argv[5].replace("Z", "+00:00")).astimezone(timezone.utc)
 forecast_days = int(sys.argv[6])
 data_timeout_seconds = int(sys.argv[7])
+data_chunk_hours = int(sys.argv[8])
 targets = ("generation", "consumption") if target_arg == "all" else (target_arg,)
 now = datetime.now(timezone.utc)
 
@@ -155,6 +193,31 @@ def fetch_points(target, start, end):
 def expected_intervals(start, end):
     return int((end - start).total_seconds() // (15 * 60))
 
+def fetch_range_in_chunks(target, start, end):
+    chunk_size = timedelta(hours=data_chunk_hours)
+    if chunk_size.total_seconds() <= 0:
+        raise RuntimeError("FORECAST_DATA_CHUNK_HOURS must be positive")
+    all_points = []
+    first_timestamp = None
+    last_timestamp = None
+    missing_chunks = []
+    chunk_start = start
+    while chunk_start < end:
+        chunk_end = min(chunk_start + chunk_size, end)
+        points, chunk_first, chunk_last = fetch_points(target, chunk_start, chunk_end)
+        expected = expected_intervals(chunk_start, chunk_end)
+        all_points.extend(points)
+        if chunk_first and (first_timestamp is None or chunk_first < first_timestamp):
+            first_timestamp = chunk_first
+        if chunk_last and (last_timestamp is None or chunk_last > last_timestamp):
+            last_timestamp = chunk_last
+        if len(points) < expected:
+            missing_chunks.append(
+                f"{format_utc(chunk_start)} to {format_utc(chunk_end)} rows={len(points)}/{expected}"
+            )
+        chunk_start = chunk_end
+    return all_points, first_timestamp, last_timestamp, missing_chunks
+
 if train_start_arg:
     openstef_train_start = parse_utc(train_start_arg)
 elif forecast_start >= now:
@@ -179,7 +242,7 @@ for target in targets:
         ("weekly-persistence training", weekly_train_start, weekly_query_end),
         ("openstef training", openstef_train_start, openstef_train_end),
     ):
-        points, first_timestamp, last_timestamp = fetch_points(target, start, end)
+        points, first_timestamp, last_timestamp, missing_chunks = fetch_range_in_chunks(target, start, end)
         expected = expected_intervals(start, end)
         print(
             f"[forecast-setup] data {target} {label}: "
@@ -189,6 +252,10 @@ for target in targets:
         )
         if len(points) < expected:
             failures.append(f"{target} {label} has {len(points)} rows, expected {expected}")
+            for missing_chunk in missing_chunks[:10]:
+                print(f"[forecast-setup] missing {target} {label}: {missing_chunk}", flush=True)
+            if len(missing_chunks) > 10:
+                print(f"[forecast-setup] missing {target} {label}: ... {len(missing_chunks) - 10} more chunks", flush=True)
 
 if failures:
     raise SystemExit("Imported data preflight failed: " + "; ".join(failures))
@@ -226,5 +293,18 @@ printf '[forecast-setup] preflight imported forecast data\n'
 preflight_forecast_data
 
 printf '[forecast-setup] backend and data checks passed\n'
-printf '[forecast-setup] run forecast batch\n'
-./run-all-forecasts.sh "${forecast_args[@]}"
+case "$runner_mode" in
+  docker)
+    printf '[forecast-setup] run forecast batch in Docker\n'
+    docker compose --profile forecasts build forecast-runner
+    docker compose --profile forecasts run --rm --no-deps forecast-runner --base-url http://backend:8080 "${forecast_args[@]}"
+    ;;
+  host)
+    printf '[forecast-setup] run forecast batch on host\n'
+    ./run-all-forecasts.sh --base-url "$backend_url" "${forecast_args[@]}"
+    ;;
+  *)
+    printf '[forecast-setup] invalid FORECAST_RUNNER_MODE: %s\n' "$runner_mode" >&2
+    exit 2
+    ;;
+esac

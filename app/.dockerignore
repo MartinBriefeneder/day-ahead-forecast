@@ -1,0 +1,7 @@
+.git
+python/.venv
+reports
+quarkus/target
+quarkus/.mvn/wrapper/dists
+data
+grafana-data
