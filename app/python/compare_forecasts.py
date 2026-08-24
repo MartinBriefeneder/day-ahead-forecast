@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 import requests
 
+from forecast_dataset_api import DEFAULT_TIMEOUT_SECONDS
 from forecast_runner import timestamped_report_path
 
 
@@ -17,7 +19,7 @@ DEFAULT_OUTPUT = "all-python-forecast-comparison.html"
 TARGET = "generation"
 RUN_LIMIT = 100
 POINT_LIMIT = 10000
-TIMEOUT_SECONDS = None
+TIMEOUT_SECONDS = DEFAULT_TIMEOUT_SECONDS
 
 
 def fetch_run_summaries(base_url: str, *, target: str | None, limit: int, timeout_seconds: int | None) -> list[dict[str, Any]]:
@@ -96,6 +98,13 @@ def attach_comparison_points(
         run = dict(summary)
         run["points"] = fetch_comparison(base_url, summary["runId"], limit=point_limit, timeout_seconds=timeout_seconds)
         if run["points"]:
+            expected_count = expected_interval_count(run)
+            if expected_count is not None and len(run["points"]) < expected_count:
+                print(
+                    f"[forecast-python] comparison run_id={run['runId']} has {len(run['points'])} "
+                    f"point(s), expected {expected_count} for saved forecast window",
+                    flush=True,
+                )
             runs.append(run)
     return runs
 
@@ -111,6 +120,7 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
     for run in runs:
         if any(point.get("actualKwh") is not None for point in run["points"]):
             actual_windows.setdefault(group_key(run), run)
+    show_window_labels = len({group_key(run) for run in runs}) > 1
 
     for run in actual_windows.values():
         actual_points = run["points"]
@@ -131,12 +141,15 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
                 x=[point["timestamp"] for point in run["points"]],
                 y=[point.get("forecastKwh") for point in run["points"]],
                 mode="lines",
-                name=f"{run.get('model')} {window_label(run) if len(actual_windows) > 1 else ''}".strip(),
+                name=f"{run.get('model')} {window_label(run) if show_window_labels else ''}".strip(),
             )
         )
 
     fig.update_layout(
-        title=f"Python {target_label} Forecast Comparison<br><sup>{first['forecastStart']} to {first['forecastEnd']} ({first['sampleInterval']})</sup>",
+        title=(
+            f"Python {target_label} {comparison_title(actual_windows)}<br>"
+            f"<sup>{window_summary(runs)}</sup>"
+        ),
         xaxis_title="Time (UTC)",
         yaxis_title=f"{target_label} energy (kWh per interval)",
         hovermode="x unified",
@@ -148,6 +161,44 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
 
 def window_label(run: dict[str, Any]) -> str:
     return f"({run.get('forecastStart')} to {run.get('forecastEnd')})"
+
+
+def comparison_title(actual_windows: dict[tuple[str, str, str, str], dict[str, Any]]) -> str:
+    if actual_windows:
+        return "Forecast vs Actual Comparison"
+    return "Forecast-Only Comparison"
+
+
+def window_summary(runs: list[dict[str, Any]]) -> str:
+    groups = {group_key(run) for run in runs}
+    if len(groups) == 1:
+        run = runs[0]
+        return f"{run['forecastStart']} to {run['forecastEnd']} ({run['sampleInterval']})"
+    return f"{len(groups)} forecast windows, {len(runs)} saved runs"
+
+
+def expected_interval_count(run: dict[str, Any]) -> int | None:
+    try:
+        forecast_start = parse_instant(str(run["forecastStart"]))
+        forecast_end = parse_instant(str(run["forecastEnd"]))
+        sample_interval = parse_sample_interval(str(run["sampleInterval"]))
+    except (KeyError, ValueError):
+        return None
+    seconds = int((forecast_end - forecast_start).total_seconds())
+    interval_seconds = int(sample_interval.total_seconds())
+    if seconds <= 0 or interval_seconds <= 0:
+        return None
+    return seconds // interval_seconds
+
+
+def parse_instant(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
+def parse_sample_interval(value: str) -> timedelta:
+    if not value.startswith("PT") or not value.endswith("M"):
+        raise ValueError(f"Unsupported sample interval: {value}")
+    return timedelta(minutes=int(value.removeprefix("PT").removesuffix("M")))
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -1,10 +1,19 @@
 from pathlib import Path
+import os
 from typing import Iterable
 
 import pandas as pd
 import requests
 
-DEFAULT_TIMEOUT_SECONDS = None
+
+def default_timeout_seconds() -> float | None:
+    value = os.environ.get("FORECAST_HTTP_TIMEOUT_SECONDS", "120")
+    if value.strip().lower() in {"", "0", "none"}:
+        return None
+    return float(value)
+
+
+DEFAULT_TIMEOUT_SECONDS = default_timeout_seconds()
 
 
 def _backend_connection_error(base_url: str) -> ConnectionError:

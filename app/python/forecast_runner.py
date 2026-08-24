@@ -53,9 +53,10 @@ def log_step(message: str) -> None:
     print(f"[forecast-python] {timestamp} {message}", flush=True)
 
 
-def run_id_for_model(target: str, model: str, forecast_start: datetime) -> str:
-    timestamp = forecast_start.strftime("%Y%m%dT%H%M%SZ")
-    return f"{target}-{model}-{timestamp}"
+def run_id_for_model(target: str, model: str, forecast_start: datetime, forecast_end: datetime) -> str:
+    start_timestamp = forecast_start.strftime("%Y%m%dT%H%M%SZ")
+    end_timestamp = forecast_end.strftime("%Y%m%dT%H%M%SZ")
+    return f"{target}-{model}-{start_timestamp}-{end_timestamp}"
 
 
 def report_timestamp(value: datetime | str | None = None) -> str:

@@ -28,8 +28,12 @@ class DefaultOpenStefXGBoostTest(unittest.TestCase):
 
     def test_run_id_contains_target_model_and_forecast_start(self):
         self.assertEqual(
-            "generation-openstef-default-xgboost-20250909T000000Z",
-            run_id("generation", datetime(2025, 9, 9, tzinfo=timezone.utc)),
+            "generation-openstef-default-xgboost-20250909T000000Z-20250916T000000Z",
+            run_id(
+                "generation",
+                datetime(2025, 9, 9, tzinfo=timezone.utc),
+                datetime(2025, 9, 16, tzinfo=timezone.utc),
+            ),
         )
 
     def test_api_payload_uses_backend_metric_list_shape(self):
@@ -91,6 +95,26 @@ class DefaultOpenStefXGBoostTest(unittest.TestCase):
         self.assertIn("Time (UTC)", html)
         self.assertIn("Generation energy (kWh per 15-minute interval)", html)
         self.assertIn(MODEL_NAME, html)
+
+    def test_write_comparison_plot_uses_forecast_only_title_without_actuals(self):
+        payload = {
+            "model": MODEL_NAME,
+            "points": [
+                {
+                    "timestamp": "2026-08-24T08:00:00Z",
+                    "forecastKwh": 1.25,
+                    "actualKwh": None,
+                }
+            ],
+        }
+        metadata = {"target": "generation"}
+
+        with TemporaryDirectory() as directory:
+            path = write_comparison_plot(Path(directory), payload, metadata)
+            html = path.read_text(encoding="utf-8")
+
+        self.assertIn("Default XGBoost Forecast", html)
+        self.assertNotIn("Default XGBoost Forecast vs Actual", html)
 
     def test_parser_is_default_openstef_xgboost_only(self):
         args = build_parser().parse_args([])

@@ -220,9 +220,10 @@ def metric_items(metrics: dict) -> list[dict[str, float]]:
     return items
 
 
-def build_run_id(target: str, model: str, forecast_start: datetime) -> str:
-    timestamp = forecast_start.strftime("%Y%m%dT%H%M%SZ")
-    return f"{target}-{model}-{timestamp}"
+def build_run_id(target: str, model: str, forecast_start: datetime, forecast_end: datetime) -> str:
+    start_timestamp = forecast_start.strftime("%Y%m%dT%H%M%SZ")
+    end_timestamp = forecast_end.strftime("%Y%m%dT%H%M%SZ")
+    return f"{target}-{model}-{start_timestamp}-{end_timestamp}"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -276,7 +277,7 @@ def main(argv: list[str] | None = None) -> None:
         metrics, comparison = compute_metrics(forecast, actual)
         payloads.append(
             report_payload(
-                build_run_id(args.target, model, forecast_start),
+                build_run_id(args.target, model, forecast_start, forecast_end),
                 model,
                 args.target,
                 generated_at,

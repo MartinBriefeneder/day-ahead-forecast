@@ -23,8 +23,12 @@ from future_openstef_xgboost import (
 class FutureOpenStefXGBoostTest(unittest.TestCase):
     def test_run_id_contains_future_model_name(self):
         self.assertEqual(
-            "generation-openstef-future-xgboost-20260819T000000Z",
-            run_id("generation", datetime(2026, 8, 19, tzinfo=timezone.utc)),
+            "generation-openstef-future-xgboost-20260819T000000Z-20260826T000000Z",
+            run_id(
+                "generation",
+                datetime(2026, 8, 19, tzinfo=timezone.utc),
+                datetime(2026, 8, 26, tzinfo=timezone.utc),
+            ),
         )
 
     def test_next_quarter_hour_rounds_up(self):

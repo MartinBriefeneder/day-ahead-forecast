@@ -39,8 +39,8 @@ FUTURE_WEATHER_FEATURES = (
 )
 
 
-def run_id(target: str, forecast_start: datetime) -> str:
-    return run_id_for_model(target, MODEL_NAME, forecast_start)
+def run_id(target: str, forecast_start: datetime, forecast_end: datetime) -> str:
+    return run_id_for_model(target, MODEL_NAME, forecast_start, forecast_end)
 
 
 def next_quarter_hour(now: datetime | None = None) -> datetime:
@@ -240,7 +240,7 @@ def api_payload(
         "total_forecast_kwh": float(forecast.sum()),
     }
     return {
-        "runId": run_id(target, forecast_start),
+        "runId": run_id(target, forecast_start, forecast_end),
         "model": MODEL_NAME,
         "target": target,
         "modelFamily": MODEL_FAMILY,

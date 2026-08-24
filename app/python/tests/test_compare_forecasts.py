@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from compare_forecasts import build_parser, select_summaries, write_comparison_figure
+from compare_forecasts import build_parser, expected_interval_count, select_summaries, write_comparison_figure
 from forecast_runner import report_timestamp, timestamped_report_path
 
 
@@ -92,6 +92,66 @@ class CompareForecastsTest(unittest.TestCase):
 
         self.assertIn("Actual Generation (2025-12-01T00:00:00Z to 2025-12-02T00:00:00Z)", html)
         self.assertIn("Actual Generation (2025-12-02T00:00:00Z to 2025-12-03T00:00:00Z)", html)
+        self.assertIn("Forecast vs Actual Comparison", html)
+        self.assertIn("2 forecast windows, 2 saved runs", html)
+
+    def test_comparison_figure_labels_future_runs_as_forecast_only(self):
+        runs = [
+            {
+                "target": "generation",
+                "model": "model-a",
+                "forecastStart": "2026-08-24T08:00:00Z",
+                "forecastEnd": "2026-08-31T08:00:00Z",
+                "sampleInterval": "PT15M",
+                "points": [{"timestamp": "2026-08-24T08:00:00Z", "forecastKwh": 1.0, "actualKwh": None}],
+            }
+        ]
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "comparison.html"
+            write_comparison_figure(path, runs)
+            html = path.read_text(encoding="utf-8")
+
+        self.assertIn("Forecast-Only Comparison", html)
+        self.assertIn("2026-08-24T08:00:00Z to 2026-08-31T08:00:00Z", html)
+        self.assertNotIn("Actual Generation", html)
+
+    def test_comparison_figure_labels_forecast_only_multiple_windows(self):
+        runs = [
+            {
+                "target": "generation",
+                "model": "model-a",
+                "forecastStart": "2026-08-24T08:00:00Z",
+                "forecastEnd": "2026-08-31T08:00:00Z",
+                "sampleInterval": "PT15M",
+                "points": [{"timestamp": "2026-08-24T08:00:00Z", "forecastKwh": 1.0, "actualKwh": None}],
+            },
+            {
+                "target": "generation",
+                "model": "model-a",
+                "forecastStart": "2026-08-31T08:00:00Z",
+                "forecastEnd": "2026-09-07T08:00:00Z",
+                "sampleInterval": "PT15M",
+                "points": [{"timestamp": "2026-08-31T08:00:00Z", "forecastKwh": 2.0, "actualKwh": None}],
+            },
+        ]
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "comparison.html"
+            write_comparison_figure(path, runs)
+            html = path.read_text(encoding="utf-8")
+
+        self.assertIn("model-a (2026-08-24T08:00:00Z to 2026-08-31T08:00:00Z)", html)
+        self.assertIn("model-a (2026-08-31T08:00:00Z to 2026-09-07T08:00:00Z)", html)
+
+    def test_expected_interval_count_uses_saved_forecast_window(self):
+        run = {
+            "forecastStart": "2026-08-24T08:00:00Z",
+            "forecastEnd": "2026-08-31T08:00:00Z",
+            "sampleInterval": "PT15M",
+        }
+
+        self.assertEqual(672, expected_interval_count(run))
 
     def test_timestamped_report_path_adds_utc_timestamp_to_filename(self):
         path = timestamped_report_path(

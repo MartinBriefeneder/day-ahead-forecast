@@ -39,13 +39,19 @@ public class ForecastRunService {
         if (runId == null || runId.isBlank()) {
             throw new IllegalArgumentException("runId must be provided");
         }
-        List<ForecastComparisonPoint> forecastPoints = forecastRunRepository.findComparison(runId, limit);
-        if (forecastPoints.isEmpty()) {
+        ForecastRunSummary summary = forecastRunRepository.findRun(runId).orElse(null);
+        if (summary == null) {
+            List<ForecastComparisonPoint> forecastPoints = forecastRunRepository.findComparison(runId, limit);
             return response(runId, forecastPoints, 0);
         }
 
-        ForecastRunSummary summary = forecastRunRepository.findRun(runId).orElse(null);
-        if (summary == null) {
+        List<ForecastComparisonPoint> forecastPoints = forecastRunRepository.findComparison(
+                runId,
+                summary.forecastStart(),
+                summary.forecastEnd(),
+                limit
+        );
+        if (forecastPoints.isEmpty()) {
             return response(runId, forecastPoints, 0);
         }
 

@@ -53,8 +53,8 @@ def parse_base_models(value: str) -> list[str]:
     return models
 
 
-def run_id(target: str, forecast_start: datetime) -> str:
-    return run_id_for_model(target, MODEL_NAME, forecast_start)
+def run_id(target: str, forecast_start: datetime, forecast_end: datetime) -> str:
+    return run_id_for_model(target, MODEL_NAME, forecast_start, forecast_end)
 
 
 def create_custom_workflow(target: str, *, base_models: list[str], combiner_model: str, ensemble_type: str, weather_features: tuple[str, ...] = WEATHER_FEATURES):
@@ -88,7 +88,7 @@ def api_payload(
     report_path: str | Path | None = None,
 ) -> dict[str, Any]:
     return {
-        "runId": run_id(target, forecast_start),
+        "runId": run_id(target, forecast_start, forecast_end),
         "model": MODEL_NAME,
         "target": target,
         "modelFamily": MODEL_FAMILY,
@@ -172,10 +172,11 @@ def write_comparison_plot(output_dir: Path, payload: dict[str, Any], metadata: d
     )
     target_label = str(metadata["target"]).capitalize()
     points = payload["points"]
+    has_actual = any(point.get("actualKwh") is not None for point in points)
 
     fig = go.Figure()
     actual_values = [point.get("actualKwh") for point in points]
-    if any(value is not None for value in actual_values):
+    if has_actual:
         fig.add_trace(
             go.Scatter(
                 x=[point["timestamp"] for point in points],
@@ -195,7 +196,8 @@ def write_comparison_plot(output_dir: Path, payload: dict[str, Any], metadata: d
     )
 
     fig.update_layout(
-        title=f"Custom OpenSTEF {target_label} Ensemble Forecast vs Actual",
+        title=f"Custom OpenSTEF {target_label} Ensemble Forecast"
+        f"{' vs Actual' if has_actual else ''}",
         xaxis_title="Time (UTC)",
         yaxis_title=f"{target_label} energy (kWh per 15-minute interval)",
         hovermode="x unified",

@@ -40,6 +40,22 @@ class ForecastRunRepositoryTest {
     }
 
     @Test
+    void buildComparisonFluxCanRestrictToForecastWindow() throws Exception {
+        ForecastRunRepository repository = new ForecastRunRepository();
+        setField(repository, "forecastMeasurement", "energy_forecasts");
+        setField(repository, "bucket", "energy");
+
+        String flux = repository.buildComparisonFlux(
+                "run-1",
+                Instant.parse("2026-08-24T08:00:00Z"),
+                Instant.parse("2026-08-31T08:00:00Z"),
+                672
+        );
+
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"2026-08-24T08:00:00Z\"), stop: time(v: \"2026-08-31T08:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"energy_forecasts\") |> filter(fn: (r) => r[\"run_id\"] == \"run-1\") |> filter(fn: (r) => contains(value: r[\"_field\"], set: [\"forecast_kwh\", \"actual_kwh\", \"error_kwh\"])) |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> group() |> sort(columns: [\"_time\"]) |> limit(n: 672)", flux);
+    }
+
+    @Test
     void buildComparisonFluxEscapesRunId() throws Exception {
         ForecastRunRepository repository = new ForecastRunRepository();
         setField(repository, "forecastMeasurement", "energy_forecasts");

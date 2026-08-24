@@ -42,8 +42,8 @@ from weather_features import DEFAULT_GRIDOO_LOCATION_ID, DEFAULT_WEATHER_PATH
 DEFAULT_N_TRIALS = 10
 
 
-def run_id(target: str, model: str, forecast_start: datetime) -> str:
-    return run_id_for_model(target, model, forecast_start)
+def run_id(target: str, model: str, forecast_start: datetime, forecast_end: datetime) -> str:
+    return run_id_for_model(target, model, forecast_start, forecast_end)
 
 
 def create_xgboost_config(target: str, *, tuned: bool, weather_features: tuple[str, ...] = WEATHER_FEATURES):
@@ -163,7 +163,7 @@ def forecast_payload(
     actual = actual[(actual.index >= forecast_start) & (actual.index < forecast_end)]
     metrics, comparison = compute_metrics(forecast.median_series.rename("forecast_kwh"), actual)
     payload = api_payload(
-        run_id_value=run_id(target, model, forecast_start),
+        run_id_value=run_id(target, model, forecast_start, forecast_end),
         model=model,
         target=target,
         generated_at=generated_at,
@@ -193,12 +193,17 @@ def write_comparison_plot(output_dir: Path, payloads: list[dict[str, Any]], meta
         generated_at=metadata.get("generatedAt"),
     )
     target_label = str(metadata["target"]).capitalize()
+    has_actual = any(
+        point.get("actualKwh") is not None
+        for payload in payloads
+        for point in payload["points"]
+    )
 
     fig = go.Figure()
     if payloads:
         actual_points = payloads[0]["points"]
         actual_values = [point.get("actualKwh") for point in actual_points]
-        if any(value is not None for value in actual_values):
+        if has_actual:
             fig.add_trace(
                 go.Scatter(
                     x=[point["timestamp"] for point in actual_points],
@@ -220,7 +225,8 @@ def write_comparison_plot(output_dir: Path, payloads: list[dict[str, Any]], meta
         )
 
     fig.update_layout(
-        title=f"OpenSTEF {target_label} XGBoost Forecast vs Actual",
+        title=f"OpenSTEF {target_label} XGBoost Forecast"
+        f"{' vs Actual' if has_actual else ''}",
         xaxis_title="Time (UTC)",
         yaxis_title=f"{target_label} energy (kWh per 15-minute interval)",
         hovermode="x unified",

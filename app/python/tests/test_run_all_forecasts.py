@@ -4,7 +4,7 @@ from pathlib import Path
 
 class RunAllForecastsScriptTest(unittest.TestCase):
     def test_batch_runner_includes_future_forecast_before_comparison(self):
-        script_path = Path(__file__).resolve().parents[2] / "run-all-forecasts.sh"
+        script_path = Path(__file__).resolve().parents[2] / "run-forecasts.sh"
         lines = script_path.read_text(encoding="utf-8").splitlines()
         commands = [line.strip() for line in lines if line.strip().startswith("run_forecast_step ") and ".py" in line]
 
@@ -15,13 +15,16 @@ class RunAllForecastsScriptTest(unittest.TestCase):
                 'run_forecast_step "tuned-openstef-xgboost $current_target" python3 tuned_openstef.py "${common_args[@]}"',
                 'run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"',
                 'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
-                'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved',
             ],
-            commands,
+            commands[:5],
+        )
+        self.assertEqual(
+            'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved',
+            commands[5],
         )
 
     def test_batch_runner_exposes_shared_forecast_window_options(self):
-        script_path = Path(__file__).resolve().parents[2] / "run-all-forecasts.sh"
+        script_path = Path(__file__).resolve().parents[2] / "run-forecasts.sh"
         script = script_path.read_text(encoding="utf-8")
 
         self.assertIn('--forecast-start ISO', script)
@@ -31,15 +34,14 @@ class RunAllForecastsScriptTest(unittest.TestCase):
         self.assertIn('--base-url URL', script)
         self.assertIn('common_args=(--base-url "$base_url" --target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")', script)
         self.assertIn('common_args+=(--train-start "$train_start")', script)
+        self.assertIn('FORECAST_COMPARE_ALL_SAVED=1', script)
+        self.assertIn('if is_enabled "$compare_all_saved"; then', script)
 
-    def test_server_wrapper_passes_default_week_forecast_horizon(self):
-        script_path = Path(__file__).resolve().parents[2] / "run-server-and-forecasts.sh"
+    def test_legacy_batch_runner_delegates_to_forecast_runner(self):
+        script_path = Path(__file__).resolve().parents[2] / "run-all-forecasts.sh"
         script = script_path.read_text(encoding="utf-8")
 
-        self.assertIn('forecast_days="7"', script)
-        self.assertIn('forecast_days_explicit="0"', script)
-        self.assertIn('forecast_days_explicit="1"', script)
-        self.assertIn('forecast_args+=(--forecast-days "$forecast_days")', script)
+        self.assertIn('exec "$SCRIPT_DIR/run-forecasts.sh" "$@"', script)
 
 
 if __name__ == "__main__":

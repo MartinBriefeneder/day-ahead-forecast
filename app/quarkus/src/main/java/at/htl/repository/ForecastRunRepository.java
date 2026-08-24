@@ -76,6 +76,13 @@ public class ForecastRunRepository {
         }
     }
 
+    public List<ForecastComparisonPoint> findComparison(String runId, Instant from, Instant to, int limit) throws Exception {
+        String flux = buildComparisonFlux(runId, from, to, limit);
+        try (InfluxDBClient client = newClient()) {
+            return queryRecords(client, flux).stream().map(this::toComparisonPoint).toList();
+        }
+    }
+
     public Optional<ForecastRunSummary> findRun(String runId) throws Exception {
         String flux = buildRunFlux(runId, true);
         try (InfluxDBClient client = newClient()) {
@@ -115,8 +122,18 @@ public class ForecastRunRepository {
     }
 
     String buildComparisonFlux(String runId, int limit) {
+        return buildComparisonFlux(runId, Instant.EPOCH, null, limit);
+    }
+
+    String buildComparisonFlux(String runId, Instant from, Instant to, int limit) {
         if (runId == null || runId.isBlank()) {
             throw new IllegalArgumentException("runId must be provided");
+        }
+        if (from == null) {
+            throw new IllegalArgumentException("from must be provided");
+        }
+        if (to != null && !to.isAfter(from)) {
+            throw new IllegalArgumentException("to must be after from");
         }
         if (limit <= 0 || limit > 100_000) {
             throw new IllegalArgumentException("limit must be between 1 and 100000");
@@ -124,7 +141,7 @@ public class ForecastRunRepository {
 
         return new StringBuilder()
                 .append("from(bucket: ").append(fluxString(bucket)).append(")")
-                .append(allTimeRangeFlux())
+                .append(rangeFlux(from, to))
                 .append(" |> filter(fn: (r) => r[\"_measurement\"] == ").append(fluxString(forecastMeasurement)).append(")")
                 .append(" |> filter(fn: (r) => r[\"run_id\"] == ").append(fluxString(runId)).append(")")
                 .append(" |> filter(fn: (r) => contains(value: r[\"_field\"], set: [\"forecast_kwh\", \"actual_kwh\", \"error_kwh\"]))")

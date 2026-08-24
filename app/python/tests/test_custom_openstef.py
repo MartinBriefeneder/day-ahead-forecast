@@ -35,8 +35,12 @@ class CustomOpenStefTest(unittest.TestCase):
 
     def test_run_id_contains_target_model_and_forecast_start(self):
         self.assertEqual(
-            "generation-openstef-custom-ensemble-20250909T000000Z",
-            run_id("generation", datetime(2025, 9, 9, tzinfo=timezone.utc)),
+            "generation-openstef-custom-ensemble-20250909T000000Z-20250916T000000Z",
+            run_id(
+                "generation",
+                datetime(2025, 9, 9, tzinfo=timezone.utc),
+                datetime(2025, 9, 16, tzinfo=timezone.utc),
+            ),
         )
 
     def test_api_payload_uses_backend_metric_list_shape(self):

@@ -38,6 +38,7 @@ class ForecastDatasetApiTest(unittest.TestCase):
         self.assertEqual(["consumption"], list(data.columns))
         self.assertEqual(pd.Timestamp("2025-06-11T00:00:00Z"), data.index[0])
         self.assertNotIn("weather_diagnostics", data.attrs)
+        self.assertEqual(120.0, DEFAULT_TIMEOUT_SECONDS)
         self.assertEqual(DEFAULT_TIMEOUT_SECONDS, get.call_args.kwargs["timeout"])
 
     def test_fetch_dataframe_adds_weather_only_when_requested(self):

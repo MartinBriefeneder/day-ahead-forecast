@@ -116,6 +116,8 @@ class ForecastRunServiceTest {
         assertEquals(2.0, response.points().get(0).errorKwh());
         assertEquals(null, response.points().get(1).actualKwh());
         assertEquals(ForecastDatasetTarget.GENERATION, repository.actualTarget);
+        assertEquals(Instant.parse("2025-12-01T00:00:00Z"), repository.comparisonFrom);
+        assertEquals(Instant.parse("2025-12-01T00:30:00Z"), repository.comparisonTo);
     }
 
     private ForecastRunService serviceWithRepository(ForecastRunRepository repository) throws Exception {
@@ -157,6 +159,8 @@ class ForecastRunServiceTest {
         private Optional<ForecastRunSummary> summary = Optional.empty();
         private List<ForecastDatasetValue> actualValues = List.of();
         private ForecastDatasetTarget actualTarget;
+        private Instant comparisonFrom;
+        private Instant comparisonTo;
 
         @Override
         public void save(ForecastRunRequest request) {
@@ -165,6 +169,13 @@ class ForecastRunServiceTest {
 
         @Override
         public List<at.htl.model.ForecastComparisonPoint> findComparison(String runId, int limit) {
+            return comparisonPoints;
+        }
+
+        @Override
+        public List<at.htl.model.ForecastComparisonPoint> findComparison(String runId, Instant from, Instant to, int limit) {
+            comparisonFrom = from;
+            comparisonTo = to;
             return comparisonPoints;
         }
 
