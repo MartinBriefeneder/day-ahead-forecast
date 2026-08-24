@@ -13,6 +13,11 @@ class CompareForecastsTest(unittest.TestCase):
 
         self.assertEqual("consumption", args.target)
 
+    def test_parser_can_require_complete_saved_runs(self):
+        args = build_parser().parse_args(["--require-complete"])
+
+        self.assertTrue(args.require_complete)
+
     def test_select_summaries_keeps_target_groups_separate(self):
         summaries = [
             {
@@ -114,7 +119,37 @@ class CompareForecastsTest(unittest.TestCase):
 
         self.assertIn("Forecast-Only Comparison", html)
         self.assertIn("2026-08-24T08:00:00Z to 2026-08-31T08:00:00Z", html)
+        self.assertIn("lines+markers", html)
         self.assertNotIn("Actual Generation", html)
+
+    def test_comparison_figure_warns_about_incomplete_saved_runs(self):
+        runs = [
+            {
+                "target": "generation",
+                "model": "model-a",
+                "forecastStart": "2026-08-24T08:00:00Z",
+                "forecastEnd": "2026-08-31T08:00:00Z",
+                "sampleInterval": "PT15M",
+                "pointDiagnostics": {
+                    "returnedPointCount": 12,
+                    "expectedPointCount": 672,
+                    "complete": False,
+                },
+                "points": [
+                    {"timestamp": "2026-08-24T08:00:00Z", "forecastKwh": 1.0, "actualKwh": None},
+                    {"timestamp": "2026-08-24T08:15:00Z", "forecastKwh": 2.0, "actualKwh": None},
+                ],
+            }
+        ]
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "comparison.html"
+            write_comparison_figure(path, runs)
+            html = path.read_text(encoding="utf-8")
+
+        self.assertIn("Incomplete saved runs", html)
+        self.assertIn("model-a returned 12 of 672 expected points", html)
+        self.assertIn("lines+markers", html)
 
     def test_comparison_figure_labels_forecast_only_multiple_windows(self):
         runs = [

@@ -13,10 +13,16 @@ class RunAllForecastsScriptTest(unittest.TestCase):
                 'run_forecast_step "weekly-persistence $current_target" python3 main.py "${common_args[@]}" --save',
                 'run_forecast_step "default-openstef-xgboost $current_target" python3 default_openstef_xgboost.py "${common_args[@]}"',
                 'run_forecast_step "tuned-openstef-xgboost $current_target" python3 tuned_openstef.py "${common_args[@]}"',
-                'run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"',
-                'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
             ],
-            commands[:5],
+            commands[:3],
+        )
+        self.assertEqual(
+            'run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"',
+            commands[3],
+        )
+        self.assertEqual(
+            'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
+            commands[4],
         )
         self.assertEqual(
             'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved',
@@ -35,6 +41,8 @@ class RunAllForecastsScriptTest(unittest.TestCase):
         self.assertIn('common_args=(--base-url "$base_url" --target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")', script)
         self.assertIn('common_args+=(--train-start "$train_start")', script)
         self.assertIn('FORECAST_COMPARE_ALL_SAVED=1', script)
+        self.assertIn('FORECAST_RUN_ENSEMBLE=1', script)
+        self.assertIn('if is_enabled "$run_ensemble"; then', script)
         self.assertIn('if is_enabled "$compare_all_saved"; then', script)
 
     def test_legacy_batch_runner_delegates_to_forecast_runner(self):
