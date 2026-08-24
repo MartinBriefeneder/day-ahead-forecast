@@ -12,6 +12,7 @@ from future_openstef_xgboost import (
     api_payload,
     build_parser,
     complete_future_weather_frame,
+    drop_incomplete_weather_rows,
     next_quarter_hour,
     numeric_openstef_frame,
     run_id,
@@ -106,6 +107,65 @@ class FutureOpenStefXGBoostTest(unittest.TestCase):
         self.assertEqual("float64", str(result["generation"].dtype))
         self.assertTrue(pd.isna(result.loc[0, "generation"]))
         self.assertIsNot(pd.NA, result.loc[0, "generation"])
+
+    def test_drop_incomplete_weather_rows_removes_rows_and_updates_diagnostics(self):
+        index = pd.date_range("2026-06-18T21:00:00Z", periods=2, freq="15min")
+        data = pd.DataFrame(
+            {
+                "generation": [1.0, 2.0],
+                "temperature_2m": [18.0, pd.NA],
+                "wind_speed_10m": [1.5, 1.7],
+                "shortwave_radiation": [20.0, 25.0],
+            },
+            index=index,
+        )
+        diagnostics = {"alignment": {"missingWeatherIntervalCount": 1}}
+
+        result = drop_incomplete_weather_rows(data, FUTURE_WEATHER_FEATURES, diagnostics, "training")
+
+        self.assertEqual([index[0]], list(result.index))
+        self.assertEqual(1, diagnostics["alignment"]["droppedTrainingRowsWithMissingWeather"])
+        self.assertEqual(
+            ["2026-06-18T21:15:00Z"],
+            diagnostics["alignment"]["droppedTrainingTimestampExamples"],
+        )
+
+    def test_drop_incomplete_weather_rows_rejects_empty_result(self):
+        index = pd.date_range("2026-06-18T21:15:00Z", periods=1, freq="15min")
+        data = pd.DataFrame(
+            {
+                "generation": [1.0],
+                "temperature_2m": [pd.NA],
+                "wind_speed_10m": [1.7],
+                "shortwave_radiation": [25.0],
+            },
+            index=index,
+        )
+
+        with self.assertRaisesRegex(ValueError, "no rows with complete historical weather"):
+            drop_incomplete_weather_rows(data, FUTURE_WEATHER_FEATURES, {}, "training")
+
+    def test_drop_incomplete_weather_rows_allows_empty_prediction_context(self):
+        index = pd.date_range("2026-06-18T21:15:00Z", periods=1, freq="15min")
+        data = pd.DataFrame(
+            {
+                "generation": [1.0],
+                "temperature_2m": [pd.NA],
+                "wind_speed_10m": [1.7],
+                "shortwave_radiation": [25.0],
+            },
+            index=index,
+        )
+
+        result = drop_incomplete_weather_rows(
+            data,
+            FUTURE_WEATHER_FEATURES,
+            {},
+            "prediction context",
+            require_non_empty=False,
+        )
+
+        self.assertTrue(result.empty)
 
     def test_parser_defaults_to_next_week_future_weather_model(self):
         args = build_parser().parse_args([])

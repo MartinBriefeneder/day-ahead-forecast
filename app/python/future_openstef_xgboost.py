@@ -93,8 +93,9 @@ def build_training_frame(
         data,
         path=weather_path,
         requested_features=FUTURE_WEATHER_FEATURES,
-        require_complete=True,
+        require_complete=False,
     )
+    data = drop_incomplete_weather_rows(data, FUTURE_WEATHER_FEATURES, diagnostics, "training", require_non_empty=True)
     data.attrs["weather_diagnostics"] = {"historical": diagnostics}
     data.attrs["target"] = target
     return numeric_openstef_frame(data, target)
@@ -121,7 +122,14 @@ def build_prediction_frame(
             context,
             path=weather_path,
             requested_features=FUTURE_WEATHER_FEATURES,
-            require_complete=True,
+            require_complete=False,
+        )
+        context = drop_incomplete_weather_rows(
+            context,
+            FUTURE_WEATHER_FEATURES,
+            context_diagnostics,
+            "prediction context",
+            require_non_empty=False,
         )
     else:
         context_diagnostics = {"alignment": {"alignedWeatherIntervalCount": 0}}
@@ -152,6 +160,38 @@ def numeric_openstef_frame(data: pd.DataFrame, target: str) -> pd.DataFrame:
         if column in data.columns:
             data[column] = pd.to_numeric(data[column], errors="coerce").astype("float64")
     return data
+
+
+def drop_incomplete_weather_rows(
+    data: pd.DataFrame,
+    weather_features: tuple[str, ...],
+    diagnostics: dict,
+    frame_name: str,
+    require_non_empty: bool = True,
+) -> pd.DataFrame:
+    missing_weather = data[list(weather_features)].isna().any(axis=1)
+    dropped_rows = int(missing_weather.sum())
+    diagnostics.setdefault("alignment", {})[
+        f"dropped{_diagnostic_frame_name(frame_name)}RowsWithMissingWeather"
+    ] = dropped_rows
+    if not dropped_rows:
+        return data
+
+    examples = [timestamp.isoformat().replace("+00:00", "Z") for timestamp in data.index[missing_weather][:8]]
+    diagnostics["alignment"][f"dropped{_diagnostic_frame_name(frame_name)}TimestampExamples"] = examples
+    print(
+        f"[forecast-python] dropped {dropped_rows} {frame_name} row(s) with incomplete historical weather; "
+        f"examples={', '.join(examples)}",
+        flush=True,
+    )
+    filtered = data.loc[~missing_weather].copy()
+    if require_non_empty and filtered.empty:
+        raise ValueError(f"{frame_name.capitalize()} dataset has no rows with complete historical weather values.")
+    return filtered
+
+
+def _diagnostic_frame_name(frame_name: str) -> str:
+    return "".join(part.capitalize() for part in frame_name.split())
 
 
 def complete_future_weather_frame(data: pd.DataFrame, forecast_start: datetime, forecast_end: datetime) -> pd.DataFrame:
