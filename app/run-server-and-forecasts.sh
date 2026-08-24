@@ -35,6 +35,7 @@ train_start=""
 train_days="90"
 forecast_start=""
 forecast_days="7"
+forecast_days_explicit="0"
 
 usage() {
   printf 'Usage: %s [--reset-and-import] [run-all-forecasts options]\n' "$0"
@@ -79,6 +80,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     --forecast-days)
       forecast_days="$2"
+      forecast_days_explicit="1"
       forecast_args+=("$1" "$2")
       shift 2
       ;;
@@ -513,6 +515,9 @@ if [ -z "$forecast_start" ]; then
     train_start="$default_train_start"
     forecast_args+=(--train-start "$train_start")
   fi
+fi
+if [ "$forecast_days_explicit" = "0" ]; then
+  forecast_args+=(--forecast-days "$forecast_days")
 fi
 
 printf '[forecast-setup] start Docker background services\n'

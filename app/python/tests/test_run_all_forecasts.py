@@ -32,6 +32,15 @@ class RunAllForecastsScriptTest(unittest.TestCase):
         self.assertIn('common_args=(--base-url "$base_url" --target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")', script)
         self.assertIn('common_args+=(--train-start "$train_start")', script)
 
+    def test_server_wrapper_passes_default_week_forecast_horizon(self):
+        script_path = Path(__file__).resolve().parents[2] / "run-server-and-forecasts.sh"
+        script = script_path.read_text(encoding="utf-8")
+
+        self.assertIn('forecast_days="7"', script)
+        self.assertIn('forecast_days_explicit="0"', script)
+        self.assertIn('forecast_days_explicit="1"', script)
+        self.assertIn('forecast_args+=(--forecast-days "$forecast_days")', script)
+
 
 if __name__ == "__main__":
     unittest.main()
