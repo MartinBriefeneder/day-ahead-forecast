@@ -28,6 +28,7 @@ import_verify_timeout_seconds="${FORECAST_IMPORT_VERIFY_TIMEOUT_SECONDS:-300}"
 reset_and_import="${FORECAST_RESET_AND_IMPORT:-0}"
 auto_import="${FORECAST_AUTO_IMPORT:-1}"
 csv_directory="${ENERGY_IMPORT_DIRECTORY:-./quarkus/data/csv_Archiv}"
+default_train_start="${FORECAST_DEFAULT_TRAIN_START:-2025-06-11T00:00:00Z}"
 forecast_args=()
 target="all"
 train_start=""
@@ -40,8 +41,9 @@ usage() {
   printf 'Starts the Docker server stack, imports CSV data when the database is empty, then runs all forecasts.\n'
   printf 'Pass forecast options such as --target, --train-start, --train-days, --forecast-start, and --forecast-days.\n'
   printf 'Use --csv-directory DIR to override the default CSV directory.\n'
+  printf 'Plain runs also use FORECAST_DEFAULT_TRAIN_START when --train-start is omitted.\n'
   printf 'Set FORECAST_RUNNER_MODE=host to use the host Python virtual environment instead of Docker.\n'
-  printf 'Set FORECAST_STRICT_DATA_PREFLIGHT=1 to require complete requested training windows.\n'
+  printf 'Set FORECAST_STRICT_DATA_PREFLIGHT=1 to fail on incomplete requested training windows.\n'
   printf 'Set FORECAST_AUTO_IMPORT=0 to fail instead of importing when no data exists.\n'
 }
 
@@ -301,9 +303,6 @@ def fetch_points(target, start, end):
 def expected_intervals(start, end):
     return int((end - start).total_seconds() // (15 * 60))
 
-def minimum_intervals(expected):
-    return min(expected, min_training_days * 96)
-
 def fetch_range_in_chunks(target, start, end):
     chunk_size = timedelta(hours=data_chunk_hours)
     if chunk_size.total_seconds() <= 0:
@@ -348,6 +347,7 @@ else:
 weekly_query_end = min(weekly_train_start + timedelta(days=train_days), forecast_start) if forecast_start >= now else forecast_start + timedelta(days=forecast_days)
 
 failures = []
+total_points = 0
 for target in targets:
     for label, start, end in (
         ("weekly-persistence training", weekly_train_start, weekly_query_end),
@@ -355,10 +355,10 @@ for target in targets:
     ):
         points, first_timestamp, last_timestamp, missing_chunks = fetch_range_in_chunks(target, start, end)
         expected = expected_intervals(start, end)
-        minimum = minimum_intervals(expected)
+        total_points += len(points)
         print(
             f"[forecast-setup] data {target} {label}: "
-            f"rows={len(points)}/{expected} minimum={minimum} start={format_utc(start)} end={format_utc(end)} "
+            f"rows={len(points)}/{expected} start={format_utc(start)} end={format_utc(end)} "
             f"first={first_timestamp} last={last_timestamp}",
             flush=True,
         )
@@ -373,8 +373,9 @@ for target in targets:
                 print(f"[forecast-setup] missing {target} {label}: ... {len(missing_chunks) - 10} more chunks", flush=True)
             if strict_data_preflight:
                 failures.append(f"{target} {label} has {len(points)} rows, expected {expected}")
-        if len(points) < minimum:
-            failures.append(f"{target} {label} has {len(points)} rows, minimum required is {minimum}")
+
+if total_points == 0:
+    failures.append("no usable imported data was found for the selected target and forecast windows")
 
 if failures:
     raise SystemExit("Imported data preflight failed: " + "; ".join(failures))
@@ -468,7 +469,10 @@ apply_training_window_override() {
     return
   fi
 
-  override="$(resolve_available_training_window)"
+  if ! override="$(resolve_available_training_window)"; then
+    printf '[forecast-setup] could not adjust training window automatically; continuing with requested window\n'
+    return
+  fi
   if [ -z "$override" ]; then
     return
   fi
@@ -505,6 +509,10 @@ esac
 if [ -z "$forecast_start" ]; then
   forecast_start="$(resolve_default_forecast_start)"
   forecast_args+=(--forecast-start "$forecast_start")
+  if [ -z "$train_start" ]; then
+    train_start="$default_train_start"
+    forecast_args+=(--train-start "$train_start")
+  fi
 fi
 
 printf '[forecast-setup] start Docker background services\n'

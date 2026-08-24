@@ -8,10 +8,17 @@ forecast_start=""
 forecast_days="7"
 target="all"
 base_url="${FORECAST_BACKEND_URL:-http://localhost:8080}"
+continue_on_error="${FORECAST_BATCH_CONTINUE_ON_ERROR:-1}"
+default_train_start="${FORECAST_DEFAULT_TRAIN_START:-2025-06-11T00:00:00Z}"
+failed_steps=0
+successful_steps=0
+successful_forecast_steps=0
 
 usage() {
   printf 'Usage: %s [--target generation|consumption|all] [--base-url URL] [--train-start ISO] [--train-days DAYS] [--forecast-start ISO] [--forecast-days DAYS]\n' "$0"
   printf 'Defaults: --target all --train-days 90 --forecast-start next-quarter-hour --forecast-days 7\n'
+  printf 'Plain runs also use FORECAST_DEFAULT_TRAIN_START when --train-start is omitted.\n'
+  printf 'Set FORECAST_BATCH_CONTINUE_ON_ERROR=0 to stop after the first failed forecast step.\n'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -66,6 +73,9 @@ esac
 
 if [ -z "$forecast_start" ]; then
   forecast_start="$(python3 -c 'from datetime import datetime, timedelta, timezone; now = datetime.now(timezone.utc).replace(second=0, microsecond=0); minute = (now.minute // 15 + 1) * 15; value = now.replace(minute=0) + timedelta(hours=1) if minute == 60 else now.replace(minute=minute); print(value.isoformat().replace("+00:00", "Z"))')"
+  if [ -z "$train_start" ]; then
+    train_start="$default_train_start"
+  fi
 fi
 
 forecast_end="$(python3 -c 'from datetime import datetime, timedelta, timezone; import sys; print((datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).astimezone(timezone.utc) + timedelta(days=int(sys.argv[2]))).isoformat().replace("+00:00", "Z"))' "$forecast_start" "$forecast_days")"
@@ -75,10 +85,34 @@ export PYTHONUNBUFFERED=1
 
 run_forecast_step() {
   local label="$1"
+  local status
   shift
   printf '[forecast-batch] start %s\n' "$label"
-  "$@"
-  printf '[forecast-batch] done %s\n' "$label"
+  if "$@"; then
+    successful_steps=$((successful_steps + 1))
+    case "$label" in
+      compare-*)
+        ;;
+      *)
+        successful_forecast_steps=$((successful_forecast_steps + 1))
+        ;;
+    esac
+    printf '[forecast-batch] done %s\n' "$label"
+    return 0
+  fi
+
+  status="$?"
+  failed_steps=$((failed_steps + 1))
+  printf '[forecast-batch] failed %s exit=%s\n' "$label" "$status" >&2
+  case "$continue_on_error" in
+    1|true|TRUE|yes|YES)
+      printf '[forecast-batch] continue after failed step %s\n' "$label" >&2
+      return 0
+      ;;
+    *)
+      return "$status"
+      ;;
+  esac
 }
 
 if [ "${FORECAST_SKIP_VENV:-0}" != "1" ]; then
@@ -108,3 +142,11 @@ for current_target in "${targets[@]}"; do
   run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"
   run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved
 done
+
+if [ "$failed_steps" -gt 0 ]; then
+  printf '[forecast-batch] completed with failed_steps=%s successful_steps=%s successful_forecast_steps=%s\n' "$failed_steps" "$successful_steps" "$successful_forecast_steps" >&2
+fi
+if [ "$successful_forecast_steps" -eq 0 ]; then
+  printf '[forecast-batch] no forecast step completed successfully\n' >&2
+  exit 1
+fi
