@@ -93,6 +93,7 @@ PY
 run_validation_report() {
   printf '[data-check] validate CSV parser output from %s\n' "$import_dir"
   docker compose --profile import run --rm \
+    --user "$(id -u):$(id -g)" \
     --volume "$import_dir:/import-data:ro" \
     --volume "$report_dir_abs:/check-output" \
     --entrypoint /bin/sh \
