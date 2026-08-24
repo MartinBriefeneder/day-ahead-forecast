@@ -26,6 +26,8 @@ strict_data_preflight="${FORECAST_STRICT_DATA_PREFLIGHT:-0}"
 min_training_days="${FORECAST_MIN_TRAINING_DAYS:-14}"
 import_verify_timeout_seconds="${FORECAST_IMPORT_VERIFY_TIMEOUT_SECONDS:-300}"
 reset_and_import="${FORECAST_RESET_AND_IMPORT:-0}"
+auto_import="${FORECAST_AUTO_IMPORT:-1}"
+csv_directory="${ENERGY_IMPORT_DIRECTORY:-./quarkus/data/csv_Archiv}"
 forecast_args=()
 target="all"
 train_start=""
@@ -35,10 +37,12 @@ forecast_days="7"
 
 usage() {
   printf 'Usage: %s [--reset-and-import] [run-all-forecasts options]\n' "$0"
-  printf 'Starts Docker background services, waits for the backend, then runs all forecasts.\n'
+  printf 'Starts the Docker server stack, imports CSV data when the database is empty, then runs all forecasts.\n'
   printf 'Pass forecast options such as --target, --train-start, --train-days, --forecast-start, and --forecast-days.\n'
+  printf 'Use --csv-directory DIR to override the default CSV directory.\n'
   printf 'Set FORECAST_RUNNER_MODE=host to use the host Python virtual environment instead of Docker.\n'
   printf 'Set FORECAST_STRICT_DATA_PREFLIGHT=1 to require complete requested training windows.\n'
+  printf 'Set FORECAST_AUTO_IMPORT=0 to fail instead of importing when no data exists.\n'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -46,6 +50,10 @@ while [ "$#" -gt 0 ]; do
     --reset-and-import)
       reset_and_import="1"
       shift
+      ;;
+    --csv-directory)
+      csv_directory="$2"
+      shift 2
       ;;
     --target)
       target="$2"
@@ -154,6 +162,79 @@ start_server_stack() {
   printf '[forecast-setup] backend: %s\n' "$backend_url"
   printf '[forecast-setup] grafana: http://localhost:3000\n'
   printf '[forecast-setup] influxdb: http://localhost:8086\n'
+}
+
+has_imported_data() {
+  python3 - "$backend_url" "$data_timeout_seconds" <<'PY'
+import json
+import sys
+from urllib.request import urlopen
+
+base_url = sys.argv[1].rstrip("/")
+timeout_seconds = int(sys.argv[2])
+with urlopen(f"{base_url}/api/energy-import/status", timeout=timeout_seconds) as response:
+    payload = json.load(response)
+print("1" if payload.get("hasImportedData") else "0")
+PY
+}
+
+run_backend_csv_import() {
+  local import_dir
+
+  if [ ! -d "$csv_directory" ]; then
+    printf '[forecast-setup] CSV import directory does not exist: %s\n' "$csv_directory" >&2
+    exit 1
+  fi
+
+  import_dir="$(realpath "$csv_directory")"
+  printf '[forecast-setup] import CSV data through backend importer: %s\n' "$import_dir"
+  docker compose --profile import run --rm \
+    --volume "$import_dir:/import-data:ro" \
+    importer
+}
+
+wait_for_any_imported_data() {
+  local started_at
+  local status
+
+  started_at="$(date +%s)"
+  while true; do
+    if status="$(has_imported_data)" && [ "$status" = "1" ]; then
+      return 0
+    fi
+    if [ $(( $(date +%s) - started_at )) -ge "$import_verify_timeout_seconds" ]; then
+      return 1
+    fi
+    sleep 5
+  done
+}
+
+ensure_imported_data_exists() {
+  local status
+
+  if ! status="$(has_imported_data)"; then
+    printf '[forecast-setup] could not check imported data status through backend\n' >&2
+    exit 1
+  fi
+
+  if [ "$status" = "1" ]; then
+    printf '[forecast-setup] imported actual data found\n'
+    return
+  fi
+
+  if [ "$auto_import" = "0" ]; then
+    printf '[forecast-setup] no imported actual data found and FORECAST_AUTO_IMPORT=0\n' >&2
+    exit 1
+  fi
+
+  printf '[forecast-setup] no imported actual data found; CSV import is required before forecasts\n'
+  run_backend_csv_import
+
+  if ! wait_for_any_imported_data; then
+    printf '[forecast-setup] CSV import finished, but no imported actual data was found after %s seconds\n' "$import_verify_timeout_seconds" >&2
+    exit 1
+  fi
+  printf '[forecast-setup] CSV import completed and imported actual data is available\n'
 }
 
 resolve_default_forecast_start() {
@@ -438,6 +519,9 @@ fi
 
 printf '[forecast-setup] wait for backend at %s\n' "$backend_url"
 wait_for_backend
+
+printf '[forecast-setup] check imported actual data\n'
+ensure_imported_data_exists
 
 printf '[forecast-setup] preflight imported forecast data\n'
 wait_for_forecast_data

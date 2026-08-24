@@ -53,6 +53,10 @@ public class EnergyImportService {
         return series.size();
     }
 
+    public boolean hasImportedData() throws Exception {
+        return energySeriesRepository.hasImportedValues();
+    }
+
     private String formatDuration(Duration duration) {
         return duration.toMillis() + " ms";
     }

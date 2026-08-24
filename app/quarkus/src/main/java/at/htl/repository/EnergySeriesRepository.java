@@ -103,6 +103,22 @@ public class EnergySeriesRepository {
         return values;
     }
 
+    public boolean hasImportedValues() throws Exception {
+        try (InfluxDBClient client = newClient()) {
+            return !queryRecords(client, buildImportedValuesStatusFlux()).isEmpty();
+        }
+    }
+
+    String buildImportedValuesStatusFlux() {
+        return new StringBuilder()
+                .append("from(bucket: ").append(fluxString(bucket)).append(")")
+                .append(" |> range(start: time(v: \"1970-01-01T00:00:00Z\"), stop: time(v: \"2100-01-01T00:00:00Z\"))")
+                .append(" |> filter(fn: (r) => r[\"_measurement\"] == ").append(fluxString(measurement)).append(")")
+                .append(" |> filter(fn: (r) => r[\"_field\"] == \"value_kwh\")")
+                .append(" |> limit(n: 1)")
+                .toString();
+    }
+
     String buildFlux(String meteringPoint, DirectionType direction, Instant from, Instant to, int limit) {
         if (meteringPoint != null && !meteringPoint.isBlank()) {
             meteringPoint = meteringPoint.trim();

@@ -17,10 +17,7 @@ fi
 : "${INFLUXDB_BUCKET:=energy}"
 export INFLUXDB_TOKEN INFLUXDB_ORG INFLUXDB_BUCKET
 
-printf 'Building backend image...\n'
-docker build -t day-ahead-forecast-backend ./quarkus
-
-docker compose --profile server up -d --remove-orphans
+docker compose --profile server up -d --build --remove-orphans
 
 printf 'Backend: http://localhost:8080\n'
 printf 'Grafana: http://localhost:3000\n'

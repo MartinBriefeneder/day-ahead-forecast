@@ -30,6 +30,17 @@ class EnergySeriesRepositoryTest {
     }
 
     @Test
+    void buildImportedValuesStatusFluxChecksForAnyImportedValue() throws Exception {
+        EnergySeriesRepository repository = new EnergySeriesRepository();
+        setField(repository, "measurement", "energy_values");
+        setField(repository, "bucket", "energy");
+
+        String flux = repository.buildImportedValuesStatusFlux();
+
+        assertEquals("from(bucket: \"energy\") |> range(start: time(v: \"1970-01-01T00:00:00Z\"), stop: time(v: \"2100-01-01T00:00:00Z\")) |> filter(fn: (r) => r[\"_measurement\"] == \"energy_values\") |> filter(fn: (r) => r[\"_field\"] == \"value_kwh\") |> limit(n: 1)", flux);
+    }
+
+    @Test
     void toForecastDatasetValueMapsTimestampAndNumericValue() {
         EnergySeriesRepository repository = new EnergySeriesRepository();
 
