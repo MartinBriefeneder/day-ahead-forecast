@@ -55,7 +55,7 @@ def create_default_openstef_xgboost_workflow(target: str, weather_features: tupl
         model_id=f"{target}_default_openstef_xgboost",
         model="xgboost",
         horizons=[LeadTime.from_string(HORIZON)],
-        quantiles=[Q(0.5), Q(0.1), Q(0.9)],
+        quantiles=[Q(0.1), Q(0.5), Q(0.9)],
         target_column=target,
         **openstef_weather_config_kwargs(weather_features),
         xgboost_hyperparams=XGBoostHyperParams(),

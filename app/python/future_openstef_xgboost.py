@@ -61,7 +61,7 @@ def create_future_openstef_xgboost_workflow(target: str):
         model_id=f"{target}_future_openstef_xgboost",
         model="xgboost",
         horizons=[LeadTime.from_string(HORIZON)],
-        quantiles=[Q(0.5), Q(0.1), Q(0.9)],
+        quantiles=[Q(0.1), Q(0.5), Q(0.9)],
         target_column=target,
         temperature_column="temperature_2m",
         wind_speed_column="wind_speed_10m",

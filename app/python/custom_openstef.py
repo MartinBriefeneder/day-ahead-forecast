@@ -67,7 +67,7 @@ def create_custom_workflow(target: str, *, base_models: list[str], combiner_mode
         base_models=base_models,
         combiner_model=combiner_model,
         horizons=[LeadTime.from_string(HORIZON)],
-        quantiles=[Q(0.5), Q(0.1), Q(0.9)],
+        quantiles=[Q(0.1), Q(0.5), Q(0.9)],
         target_column=target,
         **openstef_weather_config_kwargs(weather_features),
         mlflow_storage=None,
