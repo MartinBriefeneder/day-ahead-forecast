@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 import pandas as pd
+import requests
 
 from weather_features import (
     WeatherFeatureDataset,
@@ -167,6 +168,32 @@ class WeatherFeaturesTest(unittest.TestCase):
         self.assertEqual(1785974400, get.call_args.kwargs["params"]["start"])
         self.assertEqual(1785976200, get.call_args.kwargs["params"]["end"])
         self.assertIn("/weather/4", get.call_args.args[0])
+
+    def test_fetch_gridoo_forecast_retries_connection_errors(self):
+        payload = [
+            {
+                "timestamp_iso": "2026-08-06T00:00:00Z",
+                "temperature": 17.0,
+            }
+        ]
+
+        class Response:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return payload
+
+        with patch("weather_features.requests.get", side_effect=[requests.ConnectionError("dns"), Response()]) as get:
+            dataset = fetch_gridoo_forecast(
+                start=pd.Timestamp("2026-08-06T00:00:00Z").to_pydatetime(),
+                end=pd.Timestamp("2026-08-06T00:15:00Z").to_pydatetime(),
+                requested_features=["temperature_2m"],
+                retry_delay_seconds=0,
+            )
+
+        self.assertEqual(2, get.call_count)
+        self.assertEqual(17.0, dataset.data.loc[pd.Timestamp("2026-08-06T00:00:00Z"), "temperature_2m"])
 
 
 if __name__ == "__main__":

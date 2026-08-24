@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import time
 from typing import Iterable
 
 import pandas as pd
@@ -285,8 +286,13 @@ def fetch_gridoo_forecast(
     location_id: int = DEFAULT_GRIDOO_LOCATION_ID,
     requested_features: Iterable[str] | None = None,
     timeout_seconds: int = 30,
+    retry_count: int = 3,
+    retry_delay_seconds: float = 2.0,
     url: str = GRIDOO_FORECAST_URL,
 ) -> WeatherFeatureDataset:
+    if retry_count < 1:
+        raise ValueError("retry_count must be positive")
+
     feature_names = _requested_gridoo_feature_names(requested_features)
     forecast_start = _utc_timestamp(start)
     forecast_end = _utc_timestamp(end)
@@ -296,8 +302,21 @@ def fetch_gridoo_forecast(
     }
     request_url = url.format(location_id=location_id)
 
-    response = requests.get(request_url, params=params, timeout=timeout_seconds)
-    response.raise_for_status()
+    last_exception: requests.RequestException | None = None
+    for attempt in range(1, retry_count + 1):
+        try:
+            response = requests.get(request_url, params=params, timeout=timeout_seconds)
+            response.raise_for_status()
+            break
+        except requests.RequestException as exc:
+            last_exception = exc
+            if attempt == retry_count:
+                raise
+            print(f"[forecast-python] Gridoo forecast request retry {attempt}/{retry_count}: {exc}", flush=True)
+            time.sleep(retry_delay_seconds)
+    else:
+        raise RuntimeError("Gridoo forecast request failed") from last_exception
+
     payload = response.json()
     data = _gridoo_frame(payload, feature_names)
     data = data[(data.index >= forecast_start) & (data.index < forecast_end)]
@@ -468,4 +487,3 @@ def _format_timestamp_examples(values: pd.Series) -> list[str]:
 
 def _format_index_examples(index: pd.Index) -> list[str]:
     return [_format_timestamp(value) for value in pd.DatetimeIndex(index).dropna().sort_values().unique()[:8]]
-

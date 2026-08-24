@@ -313,6 +313,105 @@ wait_for_forecast_data() {
   done
 }
 
+resolve_available_training_window() {
+  python3 - "$backend_url" "$target" "$train_start" "$train_days" "$forecast_start" "$data_timeout_seconds" "$min_training_days" <<'PY'
+from datetime import datetime, timedelta, timezone
+import json
+import sys
+from urllib.parse import urlencode
+from urllib.request import urlopen
+
+base_url = sys.argv[1].rstrip("/")
+target_arg = sys.argv[2]
+train_start_arg = sys.argv[3]
+requested_train_days = int(sys.argv[4])
+forecast_start = datetime.fromisoformat(sys.argv[5].replace("Z", "+00:00")).astimezone(timezone.utc)
+timeout_seconds = int(sys.argv[6])
+min_training_days = int(sys.argv[7])
+targets = ("generation", "consumption") if target_arg == "all" else (target_arg,)
+now = datetime.now(timezone.utc)
+
+def format_utc(value):
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+def parse_utc(value):
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+if train_start_arg:
+    requested_start = parse_utc(train_start_arg)
+elif forecast_start >= now:
+    requested_start = parse_utc("2025-06-11T00:00:00Z")
+else:
+    requested_start = forecast_start - timedelta(days=requested_train_days)
+requested_end = requested_start + timedelta(days=requested_train_days)
+if forecast_start < now:
+    requested_end = forecast_start
+
+first_values = []
+last_values = []
+row_counts = []
+for target in targets:
+    params = urlencode({"target": target, "from": format_utc(requested_start), "to": format_utc(requested_end)})
+    with urlopen(f"{base_url}/api/forecast-datasets?{params}", timeout=timeout_seconds) as response:
+        payload = json.load(response)
+    timestamps = sorted(point["timestamp"] for point in payload.get("points", []) if point.get("timestamp"))
+    if not timestamps:
+        raise SystemExit(f"No usable imported data for {target} in requested training window")
+    first_values.append(parse_utc(timestamps[0]))
+    last_values.append(parse_utc(timestamps[-1]))
+    row_counts.append(len(timestamps))
+
+usable_start = max(first_values)
+usable_last = min(last_values)
+usable_rows = min(row_counts)
+days_by_rows = usable_rows // 96
+days_by_range = int(((usable_last + timedelta(minutes=15)) - usable_start).total_seconds() // 86400)
+usable_days = min(requested_train_days, days_by_rows, days_by_range)
+if usable_days < min_training_days:
+    raise SystemExit(f"Only {usable_days} usable training day(s) found; minimum is {min_training_days}")
+if usable_days < requested_train_days:
+    print(f"TRAIN_START={format_utc(usable_start)}")
+    print(f"TRAIN_DAYS={usable_days}")
+PY
+}
+
+apply_training_window_override() {
+  local override
+  local override_train_start
+  local override_train_days
+
+  if [ -n "$train_start" ] || [ "$strict_data_preflight" = "1" ]; then
+    return
+  fi
+
+  override="$(resolve_available_training_window)"
+  if [ -z "$override" ]; then
+    return
+  fi
+
+  while IFS='=' read -r name value; do
+    case "$name" in
+      TRAIN_START)
+        override_train_start="$value"
+        ;;
+      TRAIN_DAYS)
+        override_train_days="$value"
+        ;;
+    esac
+  done <<EOF
+$override
+EOF
+  if [ -n "$override_train_start" ] && [ -n "$override_train_days" ]; then
+    train_start="$override_train_start"
+    train_days="$override_train_days"
+    forecast_args+=(--train-start "$train_start" --train-days "$train_days")
+    printf '[forecast-setup] adjusted training window to available imported data: train_start=%s train_days=%s\n' "$train_start" "$train_days"
+  fi
+}
+
 case "$target" in
   generation|consumption|all)
     ;;
@@ -342,8 +441,14 @@ wait_for_backend
 
 printf '[forecast-setup] preflight imported forecast data\n'
 wait_for_forecast_data
+apply_training_window_override
 
 printf '[forecast-setup] backend and data checks passed\n'
+printf '[forecast-setup] final forecast args:'
+for arg in "${forecast_args[@]}"; do
+  printf ' %s' "$arg"
+done
+printf '\n'
 case "$runner_mode" in
   docker)
     printf '[forecast-setup] run forecast batch in Docker\n'
