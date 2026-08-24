@@ -55,10 +55,11 @@ def create_xgboost_config(target: str, *, tuned: bool, weather_features: tuple[s
 
     if tuned:
         hyperparams = XGBoostHyperParams(
-            learning_rate=FloatRange(0.03, 0.3, log=True, tune=True),
-            n_estimators=IntRange(50, 300, tune=True),
-            max_depth=IntRange(1, 8, tune=True),
-            subsample=FloatRange(0.6, 1.0, tune=True),
+            learning_rate=FloatRange(0.03, 0.12, log=True, tune=True),
+            n_estimators=IntRange(180, 500, tune=True),
+            max_depth=IntRange(2, 4, tune=True),
+            subsample=FloatRange(0.6, 0.9, tune=True),
+            colsample_bytree=FloatRange(0.6, 0.9, tune=True),
         )
     else:
         hyperparams = XGBoostHyperParams()
@@ -75,15 +76,6 @@ def create_xgboost_config(target: str, *, tuned: bool, weather_features: tuple[s
         mlflow_storage=None,
         verbosity=0,
     )
-
-
-def fit_default(train_dataset, weather_features: tuple[str, ...] = WEATHER_FEATURES):
-    from openstef_models.presets import create_forecasting_workflow
-
-    config = create_xgboost_config(train_dataset.data.attrs["target"], tuned=False, weather_features=weather_features)
-    workflow = create_forecasting_workflow(config)
-    workflow.fit(train_dataset)
-    return workflow, config, None
 
 
 def fit_tuned(train_dataset, *, n_trials: int, show_progress_bar: bool, weather_features: tuple[str, ...] = WEATHER_FEATURES):
@@ -252,7 +244,7 @@ def save_payloads(payloads: list[dict[str, Any]], *, base_url: str) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run an OpenSTEF XGBoost baseline and Optuna-tuned forecast.")
+    parser = argparse.ArgumentParser(description="Run an Optuna-tuned OpenSTEF XGBoost forecast.")
     parser.add_argument("--base-url", default=BASE_URL)
     parser.add_argument("--target", default=DEFAULT_TARGET, choices=("generation", "consumption"))
     parser.add_argument("--train-start")
@@ -337,21 +329,6 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Training rows: {len(train_dataset.data):,}")
     print(f"Prediction rows: {len(predict_dataset.data):,}")
 
-    log_step("openstef-xgboost-default fit workflow")
-    default_workflow, default_config, _ = fit_default(train_dataset, weather_features)
-    log_step("openstef-xgboost-default predict and build payload")
-    default_payload, default_metrics = forecast_payload(
-        workflow=default_workflow,
-        model="openstef-xgboost-default",
-        target=args.target,
-        predict_dataset=predict_dataset,
-        generated_at=generated_at,
-        train_start=train_start,
-        train_end=train_end,
-        forecast_start=forecast_start,
-        forecast_end=forecast_end,
-    )
-
     log_step("openstef-xgboost-tuned fit workflow with tuning")
     tuned_workflow, tuned_config, study = fit_tuned(
         train_dataset,
@@ -385,7 +362,6 @@ def main(argv: list[str] | None = None) -> None:
         "nTrials": args.n_trials,
         "weatherPath": str(args.weather_path),
         "weatherAlignment": weather_diagnostics.get("alignment", {}),
-        "defaultHyperparameters": default_config.xgboost_hyperparams.model_dump(mode="json"),
         "tunedHyperparameters": tuned_config.xgboost_hyperparams.model_dump(mode="json"),
         "tuning": {
             "bestValue": study.best_value,
@@ -394,7 +370,7 @@ def main(argv: list[str] | None = None) -> None:
         },
     }
 
-    payloads = [default_payload, tuned_payload]
+    payloads = [tuned_payload]
     log_step("openstef-xgboost-tuned batch write report files")
     plot_path = write_run_files(Path(args.output_dir), payloads, metadata)
     for payload in payloads:
@@ -403,7 +379,6 @@ def main(argv: list[str] | None = None) -> None:
     save_payloads(payloads, base_url=args.base_url)
 
     print(f"Wrote tuning comparison plot to {plot_path}")
-    print(metric_summary("openstef-xgboost-default", default_metrics))
     print(metric_summary("openstef-xgboost-tuned", tuned_metrics))
     print(f"Best rCRPS:  {study.best_value:.4f}")
 

@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from tuned_openstef import api_payload, build_parser, parse_utc, run_id, save_payloads, write_comparison_plot
+from tuned_openstef import api_payload, build_parser, create_xgboost_config, parse_utc, run_id, save_payloads, write_comparison_plot
 
 
 class TunedOpenStefTest(unittest.TestCase):
@@ -71,7 +71,7 @@ class TunedOpenStefTest(unittest.TestCase):
     def test_write_comparison_plot_saves_forecast_vs_actual_html(self):
         payloads = [
             {
-                "model": "openstef-xgboost-default",
+                "model": "openstef-xgboost-tuned",
                 "points": [
                     {
                         "timestamp": "2025-09-09T00:00:00Z",
@@ -91,7 +91,17 @@ class TunedOpenStefTest(unittest.TestCase):
         self.assertIn("Forecast vs Actual", html)
         self.assertIn("Time (UTC)", html)
         self.assertIn("Generation energy (kWh per 15-minute interval)", html)
-        self.assertIn("openstef-xgboost-default", html)
+        self.assertIn("openstef-xgboost-tuned", html)
+
+    def test_tuned_search_space_excludes_default_xgboost_values(self):
+        config = create_xgboost_config("generation", tuned=True)
+        search_space = config.xgboost_hyperparams.get_search_space()
+
+        self.assertLess(search_space["learning_rate"].high, 0.3)
+        self.assertGreater(search_space["n_estimators"].low, 100)
+        self.assertLess(search_space["max_depth"].high, 6)
+        self.assertLess(search_space["subsample"].high, 1.0)
+        self.assertLess(search_space["colsample_bytree"].high, 1.0)
 
     def test_parser_is_tuned_only(self):
         args = build_parser().parse_args(["--n-trials", "3"])
