@@ -135,5 +135,8 @@ services:
         condition: service_healthy
 volumes:
   influxdb2-data:
+    name: day-ahead-forecast_influxdb2-data
   influxdb2-config:
+    name: day-ahead-forecast_influxdb2-config
   grafana-data:
+    name: day-ahead-forecast_grafana-data
