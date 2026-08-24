@@ -92,6 +92,7 @@ def attach_comparison_points(
     *,
     point_limit: int,
     timeout_seconds: int | None,
+    require_complete: bool = True,
 ) -> list[dict[str, Any]]:
     runs = []
     for summary in summaries:
@@ -100,11 +101,14 @@ def attach_comparison_points(
         if run["points"]:
             expected_count = expected_interval_count(run)
             if expected_count is not None and len(run["points"]) < expected_count:
-                print(
+                message = (
                     f"[forecast-python] comparison run_id={run['runId']} has {len(run['points'])} "
-                    f"point(s), expected {expected_count} for saved forecast window",
-                    flush=True,
+                    f"point(s), expected {expected_count} for saved forecast window"
                 )
+                if require_complete:
+                    print(f"{message}; skipped incomplete saved run", flush=True)
+                    continue
+                print(message, flush=True)
             runs.append(run)
     return runs
 
@@ -129,7 +133,7 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
             go.Scatter(
                 x=[point["timestamp"] for point in actual_points],
                 y=actual_values,
-                mode="lines",
+                mode=trace_mode(actual_points),
                 name=f"Actual {target_label} {window_label(run)}",
                 line={"color": "#111827", "width": 2},
             )
@@ -140,7 +144,7 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
             go.Scatter(
                 x=[point["timestamp"] for point in run["points"]],
                 y=[point.get("forecastKwh") for point in run["points"]],
-                mode="lines",
+                mode=trace_mode(run["points"]),
                 name=f"{run.get('model')} {window_label(run) if show_window_labels else ''}".strip(),
             )
         )
@@ -161,6 +165,12 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
 
 def window_label(run: dict[str, Any]) -> str:
     return f"({run.get('forecastStart')} to {run.get('forecastEnd')})"
+
+
+def trace_mode(points: list[dict[str, Any]]) -> str:
+    if len(points) < 2:
+        return "lines+markers"
+    return "lines"
 
 
 def comparison_title(actual_windows: dict[tuple[str, str, str, str], dict[str, Any]]) -> str:
@@ -211,6 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-limit", type=int, default=RUN_LIMIT)
     parser.add_argument("--point-limit", type=int, default=POINT_LIMIT)
     parser.add_argument("--all-saved", action="store_true", help="Compare all saved runs for the selected target instead of one forecast window.")
+    parser.add_argument("--allow-incomplete", action="store_true", help="Plot saved runs even when fewer points are returned than the saved forecast window requires.")
     return parser
 
 
@@ -226,9 +237,15 @@ def main(argv: list[str] | None = None) -> None:
     if not summaries:
         raise ValueError("No matching saved forecast runs found")
 
-    runs = attach_comparison_points(args.base_url, summaries, point_limit=args.point_limit, timeout_seconds=TIMEOUT_SECONDS)
+    runs = attach_comparison_points(
+        args.base_url,
+        summaries,
+        point_limit=args.point_limit,
+        timeout_seconds=TIMEOUT_SECONDS,
+        require_complete=not args.allow_incomplete,
+    )
     if not runs:
-        print("Matching saved forecast runs have no comparison points; skipped comparison plot")
+        print("Matching saved forecast runs have no complete comparison points; skipped comparison plot")
         return
 
     output_path = timestamped_report_path(
