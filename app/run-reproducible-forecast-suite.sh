@@ -23,15 +23,15 @@ FUTURE_FORECAST_END="2026-09-15T11:15:00Z"
 REPORT_DIR="$SCRIPT_DIR/reports/forecast-runs"
 MANIFEST="$REPORT_DIR/reproducible-forecast-suite-manifest.md"
 
-printf '[repro-suite] check backend at %s\n' "$BASE_URL"
+printf 'Check backend at %s\n' "$BASE_URL"
 if ! curl -fsS "$BASE_URL/api/energy-import/status" >/dev/null; then
-  printf '[repro-suite] backend is not reachable or imported data is unavailable. Start it from app/ with ./run-dev.sh or ./run-server.sh.\n' >&2
+  printf 'Backend is not reachable or imported data is unavailable. Start it from app/ with ./run-dev.sh or ./run-server.sh.\n' >&2
   exit 1
 fi
 
 mkdir -p "$REPORT_DIR"
 
-printf '[repro-suite] run future forecast suite: %s to %s\n' "$FUTURE_FORECAST_START" "$FUTURE_FORECAST_END"
+printf 'Run future forecast suite: %s to %s\n' "$FUTURE_FORECAST_START" "$FUTURE_FORECAST_END"
 FORECAST_RUN_LGBM=1 \
 FORECAST_RUN_ENSEMBLE=1 \
 FORECAST_BATCH_CONTINUE_ON_ERROR=0 \
@@ -42,7 +42,7 @@ FORECAST_BATCH_CONTINUE_ON_ERROR=0 \
   --forecast-start "$FUTURE_FORECAST_START" \
   --forecast-days "$FUTURE_FORECAST_DAYS"
 
-printf '[repro-suite] run future quantile reports\n'
+printf 'Run future quantile reports\n'
 (
   cd "$SCRIPT_DIR/python"
   if [ -d .venv ]; then
@@ -52,7 +52,7 @@ printf '[repro-suite] run future quantile reports\n'
   python3 quantile_calibrated_xgboost.py --base-url "$BASE_URL" --target consumption --train-days "$FUTURE_TRAIN_DAYS" --forecast-start "$FUTURE_FORECAST_START" --forecast-days "$FUTURE_FORECAST_DAYS"
 )
 
-printf '[repro-suite] run backtest forecast suite: %s to %s\n' "$BACKTEST_FORECAST_START" "$BACKTEST_FORECAST_END"
+printf 'Run backtest forecast suite: %s to %s\n' "$BACKTEST_FORECAST_START" "$BACKTEST_FORECAST_END"
 FORECAST_RUN_LGBM=1 \
 FORECAST_RUN_ENSEMBLE=1 \
 FORECAST_BATCH_CONTINUE_ON_ERROR=0 \
@@ -63,7 +63,7 @@ FORECAST_BATCH_CONTINUE_ON_ERROR=0 \
   --forecast-start "$BACKTEST_FORECAST_START" \
   --forecast-days "$BACKTEST_FORECAST_DAYS"
 
-printf '[repro-suite] run backtest quantile reports and metric exports\n'
+printf 'Run backtest quantile reports and metric exports\n'
 (
   cd "$SCRIPT_DIR/python"
   if [ -d .venv ]; then
@@ -115,5 +115,5 @@ Generated at: $(date -u '+%Y-%m-%dT%H:%M:%SZ')
 - Quantile forecast values are not persisted to the backend in the current implementation.
 EOF
 
-printf '[repro-suite] wrote manifest %s\n' "$MANIFEST"
-printf '[repro-suite] done\n'
+printf 'Wrote manifest %s\n' "$MANIFEST"
+printf 'Done\n'
