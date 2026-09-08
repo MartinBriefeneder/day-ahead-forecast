@@ -11,6 +11,7 @@ base_url="${FORECAST_BACKEND_URL:-http://localhost:8080}"
 continue_on_error="${FORECAST_BATCH_CONTINUE_ON_ERROR:-1}"
 compare_all_saved="${FORECAST_COMPARE_ALL_SAVED:-0}"
 run_ensemble="${FORECAST_RUN_ENSEMBLE:-0}"
+run_lgbm="${FORECAST_RUN_LGBM:-0}"
 default_train_start="${FORECAST_DEFAULT_TRAIN_START:-2025-06-11T00:00:00Z}"
 failed_steps=0
 successful_steps=0
@@ -22,6 +23,7 @@ usage() {
   printf 'Plain runs also use FORECAST_DEFAULT_TRAIN_START when --train-start is omitted.\n'
   printf 'Set FORECAST_BATCH_CONTINUE_ON_ERROR=0 to stop after the first failed forecast step.\n'
   printf 'Set FORECAST_COMPARE_ALL_SAVED=1 to generate the slower all-saved comparison plot.\n'
+  printf 'Set FORECAST_RUN_LGBM=1 to include the standalone OpenSTEF LightGBM step.\n'
   printf 'Set FORECAST_RUN_ENSEMBLE=1 to include the temporary custom ensemble step.\n'
 }
 
@@ -153,6 +155,11 @@ for current_target in "${targets[@]}"; do
   run_forecast_step "weekly-persistence $current_target" python3 main.py "${common_args[@]}" --save
   run_forecast_step "default-openstef-xgboost $current_target" python3 default_openstef_xgboost.py "${common_args[@]}"
   run_forecast_step "tuned-openstef-xgboost $current_target" python3 tuned_openstef.py "${common_args[@]}"
+  if is_enabled "$run_lgbm"; then
+    run_forecast_step "openstef-lgbm $current_target" python3 lgbm_openstef.py "${common_args[@]}"
+  else
+    printf '[forecast-batch] skip openstef-lgbm %s (set FORECAST_RUN_LGBM=1 to enable)\n' "$current_target"
+  fi
   if is_enabled "$run_ensemble"; then
     run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"
   else

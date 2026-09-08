@@ -17,16 +17,20 @@ class RunAllForecastsScriptTest(unittest.TestCase):
             commands[:3],
         )
         self.assertEqual(
-            'run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"',
+            'run_forecast_step "openstef-lgbm $current_target" python3 lgbm_openstef.py "${common_args[@]}"',
             commands[3],
         )
         self.assertEqual(
-            'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
+            'run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"',
             commands[4],
         )
         self.assertEqual(
-            'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved',
+            'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
             commands[5],
+        )
+        self.assertEqual(
+            'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved',
+            commands[6],
         )
 
     def test_batch_runner_exposes_shared_forecast_window_options(self):
@@ -41,7 +45,9 @@ class RunAllForecastsScriptTest(unittest.TestCase):
         self.assertIn('common_args=(--base-url "$base_url" --target "$current_target" --train-days "$train_days" --forecast-start "$forecast_start" --forecast-days "$forecast_days")', script)
         self.assertIn('common_args+=(--train-start "$train_start")', script)
         self.assertIn('FORECAST_COMPARE_ALL_SAVED=1', script)
+        self.assertIn('FORECAST_RUN_LGBM=1', script)
         self.assertIn('FORECAST_RUN_ENSEMBLE=1', script)
+        self.assertIn('if is_enabled "$run_lgbm"; then', script)
         self.assertIn('if is_enabled "$run_ensemble"; then', script)
         self.assertIn('if is_enabled "$compare_all_saved"; then', script)
 

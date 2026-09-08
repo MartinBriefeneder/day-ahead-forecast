@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from export_forecast_metrics import (
+    aggregate_metric_rows,
     build_metric_row,
     compute_metrics,
     deduplicate_summaries,
@@ -74,8 +75,47 @@ class ExportForecastMetricsTest(unittest.TestCase):
     def test_weather_source_labels_known_models(self):
         self.assertEqual("energy-only", weather_source("weekly-persistence"))
         self.assertEqual("Gridoo forecast weather", weather_source("openstef-future-xgboost"))
+        self.assertEqual("observed historical weather", weather_source("openstef-lgbm"))
         self.assertEqual("observed historical weather", weather_source("openstef-xgboost-tuned"))
         self.assertEqual("unknown", weather_source("other"))
+
+    def test_aggregate_metric_rows_groups_by_target_and_model(self):
+        rows = [
+            {
+                "target": "generation",
+                "model": "weekly-persistence",
+                "model_family": "simple-benchmark",
+                "aligned_intervals": 2,
+                "mae_kwh": 1.0,
+                "rmse_kwh": 2.0,
+                "bias_kwh": -0.5,
+                "wape_percent": 10.0,
+                "total_forecast_kwh": 5.0,
+                "total_actual_kwh": 6.0,
+                "total_energy_error_kwh": -1.0,
+            },
+            {
+                "target": "generation",
+                "model": "weekly-persistence",
+                "model_family": "simple-benchmark",
+                "aligned_intervals": 2,
+                "mae_kwh": 3.0,
+                "rmse_kwh": 4.0,
+                "bias_kwh": 0.5,
+                "wape_percent": 20.0,
+                "total_forecast_kwh": 7.0,
+                "total_actual_kwh": 6.0,
+                "total_energy_error_kwh": 1.0,
+            },
+        ]
+
+        aggregates = aggregate_metric_rows(rows)
+
+        self.assertEqual(1, len(aggregates))
+        self.assertEqual(2, aggregates[0]["run_count"])
+        self.assertEqual(2.0, aggregates[0]["mean_mae_kwh"])
+        self.assertEqual(4.0, aggregates[0]["total_aligned_intervals"])
+        self.assertEqual(12.0, aggregates[0]["total_forecast_kwh"])
 
     def test_deduplicate_summaries_keeps_latest_generated_at(self):
         summaries = [
