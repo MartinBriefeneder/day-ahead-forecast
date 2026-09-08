@@ -58,13 +58,13 @@ def select_summaries(
     forecast_end: str | None,
     all_saved: bool = False,
 ) -> list[dict[str, Any]]:
-    selected = [
+    selected = deduplicate_summaries([
         summary
         for summary in summaries
         if (target is None or summary.get("target") == target)
         and (forecast_start is None or summary.get("forecastStart") == forecast_start)
         and (forecast_end is None or summary.get("forecastEnd") == forecast_end)
-    ]
+    ])
     if all_saved:
         return selected
     if forecast_start is not None or forecast_end is not None:
@@ -84,6 +84,18 @@ def select_summaries(
             max(str(summary.get("forecastStart", "")) for summary in group),
         ),
     )
+
+
+def deduplicate_summaries(summaries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_run_id: dict[str, dict[str, Any]] = {}
+    for summary in summaries:
+        run_id = str(summary.get("runId", ""))
+        if not run_id:
+            continue
+        existing = by_run_id.get(run_id)
+        if existing is None or str(summary.get("generatedAt", "")) > str(existing.get("generatedAt", "")):
+            by_run_id[run_id] = summary
+    return list(by_run_id.values())
 
 
 def attach_comparison_points(
@@ -161,7 +173,7 @@ def write_comparison_figure(output_path: Path, runs: list[dict[str, Any]]) -> No
             f"<sup>{window_summary(runs)}</sup>"
         ),
         xaxis_title="Time (UTC)",
-        yaxis_title=f"{target_label} energy (kWh per interval)",
+        yaxis_title=f"{target_label} energy (kWh per 15-minute interval)",
         xaxis={"type": "date", "range": x_axis_range(runs)},
         hovermode="x unified",
         template="plotly_white",

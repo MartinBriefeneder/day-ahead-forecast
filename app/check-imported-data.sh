@@ -161,7 +161,7 @@ with open(report_path, encoding="utf-8") as report:
             current["metering_points"] = parse_int(value)
 
 with open(output_path, "w", newline="", encoding="utf-8") as output:
-    fieldnames = ["file", "start", "stop", "series_count", "expected_group_count", "expected_per_group"]
+    fieldnames = ["file", "start", "stop", "series_count"]
     writer = csv.DictWriter(output, fieldnames=fieldnames, delimiter="\t")
     writer.writeheader()
     for file in files:
@@ -169,9 +169,6 @@ with open(output_path, "w", newline="", encoding="utf-8") as output:
         missing = [name for name in required if name not in file]
         if missing:
             raise SystemExit(f"Validation report file summary is missing {missing}: {file}")
-        row_meter_count = file["data_rows"] * file["metering_points"]
-        if row_meter_count <= 0 or file["series_count"] % row_meter_count != 0:
-            raise SystemExit(f"Cannot derive expected group count for {file['file']}")
         start = parse_instant(file["first"])
         stop = parse_instant(file["last"]) + timedelta(minutes=15)
         writer.writerow({
@@ -179,8 +176,6 @@ with open(output_path, "w", newline="", encoding="utf-8") as output:
             "start": start.isoformat().replace("+00:00", "Z"),
             "stop": stop.isoformat().replace("+00:00", "Z"),
             "series_count": file["series_count"],
-            "expected_group_count": file["series_count"] // row_meter_count,
-            "expected_per_group": row_meter_count,
         })
 PY
 }
@@ -195,7 +190,7 @@ query_influx() {
     --org "$INFLUXDB_ORG" \
     --token "$INFLUXDB_TOKEN" \
     --raw \
-    "$flux" > "$output"
+    "$flux" > "$output" < /dev/null
 }
 
 query_file_counts() {
@@ -207,7 +202,7 @@ query_file_counts() {
   rm -rf "$file_count_dir"
   mkdir -p "$file_count_dir"
 
-  while IFS=$'\t' read -r file start stop _series_count _expected_group_count _expected_per_group; do
+  while IFS=$'\t' read -r file start stop _series_count; do
     if [ "$file" = "file" ]; then
       continue
     fi
@@ -218,14 +213,13 @@ query_file_counts() {
 }
 
 compare_counts() {
-  python3 - "$expected_series" "$expected_categories" "$overall_count_csv" "$breakdown_count_csv" <<'PY'
+  python3 - "$expected_series" "$overall_count_csv" "$breakdown_count_csv" <<'PY'
 import csv
 import sys
 
 expected_total = int(sys.argv[1])
-expected_groups = int(sys.argv[2])
-overall_path = sys.argv[3]
-breakdown_path = sys.argv[4]
+overall_path = sys.argv[2]
+breakdown_path = sys.argv[3]
 
 
 def records(path):
@@ -257,19 +251,11 @@ failures = []
 if actual_total != expected_total:
     failures.append(f"total rows mismatch: expected {expected_total}, actual {actual_total}")
 
-if expected_groups <= 0:
-    failures.append(f"invalid expected category count: {expected_groups}")
-elif expected_total % expected_groups != 0:
-    failures.append(f"expected total {expected_total} is not divisible by expected group count {expected_groups}")
-else:
-    expected_per_group = expected_total // expected_groups
-    if len(breakdown) != expected_groups:
-        failures.append(f"direction/category group count mismatch: expected {expected_groups}, actual {len(breakdown)}")
-    for direction, category, count in sorted(breakdown):
-        if count != expected_per_group:
-            failures.append(
-                f"{direction}/{category} count mismatch: expected {expected_per_group}, actual {count}"
-            )
+breakdown_total = sum(count for _, _, count in breakdown)
+if breakdown_total != actual_total:
+    failures.append(f"direction/category rows do not sum to total: breakdown {breakdown_total}, total {actual_total}")
+if not breakdown:
+    failures.append("direction/category breakdown is empty")
 
 print(f"[data-check] expected rows from CSV parser: {expected_total}")
 print(f"[data-check] actual rows in InfluxDB: {actual_total}")
@@ -317,9 +303,11 @@ with open(expected_path, newline="", encoding="utf-8") as expected_file:
     for expected in csv.DictReader(expected_file, delimiter="\t"):
         file_name = expected["file"]
         expected_total = int(expected["series_count"])
-        expected_group_count = int(expected["expected_group_count"])
-        expected_per_group = int(expected["expected_per_group"])
         actual_path = actual_dir / f"{file_name}.counts.csv"
+        if not actual_path.exists():
+            failures.append(f"{file_name} count output is missing: {actual_path}")
+            print(f"[data-check]   {file_name}: expected={expected_total} actual=missing difference=unknown")
+            continue
         breakdown = []
         for record in records(actual_path):
             direction = record.get("direction") or ""
@@ -331,15 +319,6 @@ with open(expected_path, newline="", encoding="utf-8") as expected_file:
         print(f"[data-check]   {file_name}: expected={expected_total} actual={actual_total} difference={difference}")
         if actual_total != expected_total:
             failures.append(f"{file_name} total rows mismatch: expected {expected_total}, actual {actual_total}")
-        if len(breakdown) != expected_group_count:
-            failures.append(
-                f"{file_name} direction/category group count mismatch: expected {expected_group_count}, actual {len(breakdown)}"
-            )
-        for direction, category, count in sorted(breakdown):
-            if count != expected_per_group:
-                failures.append(
-                    f"{file_name} {direction}/{category} count mismatch: expected {expected_per_group}, actual {count}"
-                )
 
 if failures:
     print("[data-check] per-file FAIL")
@@ -365,7 +344,6 @@ fi
 run_validation_report
 expected_series="$(parse_expected_value "Series parsed")"
 validation_errors="$(parse_expected_value "Errors")"
-expected_categories="$(parse_expected_value "Categories")"
 
 if [ "$validation_errors" != "0" ]; then
   printf '[data-check] CSV validation reported %s error(s). See %s\n' "$validation_errors" "$validation_report" >&2

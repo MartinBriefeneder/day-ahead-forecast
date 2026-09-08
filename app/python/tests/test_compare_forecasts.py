@@ -44,6 +44,37 @@ class CompareForecastsTest(unittest.TestCase):
 
         self.assertEqual(["consumption-run"], [summary["runId"] for summary in selected])
 
+    def test_select_summaries_deduplicates_run_ids(self):
+        summaries = [
+            {
+                "runId": "generation-run",
+                "target": "generation",
+                "model": "weekly-persistence",
+                "forecastStart": "2025-12-01T00:00:00Z",
+                "forecastEnd": "2025-12-02T00:00:00Z",
+                "sampleInterval": "PT15M",
+                "generatedAt": "2026-01-01T00:00:00Z",
+            },
+            {
+                "runId": "generation-run",
+                "target": "generation",
+                "model": "weekly-persistence",
+                "forecastStart": "2025-12-01T00:00:00Z",
+                "forecastEnd": "2025-12-02T00:00:00Z",
+                "sampleInterval": "PT15M",
+                "generatedAt": "2026-01-02T00:00:00Z",
+            },
+        ]
+
+        selected = select_summaries(
+            summaries,
+            target="generation",
+            forecast_start="2025-12-01T00:00:00Z",
+            forecast_end="2025-12-02T00:00:00Z",
+        )
+
+        self.assertEqual(["2026-01-02T00:00:00Z"], [summary["generatedAt"] for summary in selected])
+
     def test_select_summaries_all_saved_keeps_multiple_windows(self):
         summaries = [
             {
@@ -99,6 +130,7 @@ class CompareForecastsTest(unittest.TestCase):
         self.assertIn("Actual Generation (2025-12-02T00:00:00Z to 2025-12-03T00:00:00Z)", html)
         self.assertIn("Forecast vs Actual Comparison", html)
         self.assertIn("2 forecast windows, 2 saved runs", html)
+        self.assertIn("Generation energy (kWh per 15-minute interval)", html)
 
     def test_comparison_figure_labels_future_runs_as_forecast_only(self):
         runs = [

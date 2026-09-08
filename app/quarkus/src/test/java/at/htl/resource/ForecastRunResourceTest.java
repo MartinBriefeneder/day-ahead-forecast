@@ -86,6 +86,14 @@ class ForecastRunResourceTest {
     }
 
     @Test
+    void returnsNotFoundForMissingComparisonRun() {
+        given()
+                .when().get("/api/forecast-runs/missing-run/comparison")
+                .then()
+                .statusCode(404);
+    }
+
+    @Test
     void listsForecastRuns() throws Exception {
         when(forecastRunRepository.findRuns("generation", 25)).thenReturn(List.of(
                 new ForecastRunSummary(

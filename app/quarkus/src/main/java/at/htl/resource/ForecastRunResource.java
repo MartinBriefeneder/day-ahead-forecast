@@ -19,6 +19,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Path("/api/forecast-runs")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -53,6 +54,8 @@ public class ForecastRunResource {
                                                     @QueryParam("limit") @DefaultValue("10000") int limit) throws Exception {
         try {
             return forecastRunService.getComparison(runId, limit);
+        } catch (NoSuchElementException exception) {
+            throw new WebApplicationException(exception.getMessage(), Response.Status.NOT_FOUND);
         } catch (IllegalArgumentException exception) {
             throw new WebApplicationException(exception.getMessage(), Response.Status.BAD_REQUEST);
         }

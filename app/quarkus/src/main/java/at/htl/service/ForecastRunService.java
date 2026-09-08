@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 @ApplicationScoped
 public class ForecastRunService {
@@ -42,6 +43,9 @@ public class ForecastRunService {
         ForecastRunSummary summary = forecastRunRepository.findRun(runId).orElse(null);
         if (summary == null) {
             List<ForecastComparisonPoint> forecastPoints = forecastRunRepository.findComparison(runId, limit);
+            if (forecastPoints.isEmpty()) {
+                throw new NoSuchElementException("Forecast run not found: " + runId);
+            }
             return response(runId, forecastPoints, 0);
         }
 
