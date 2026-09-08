@@ -57,6 +57,20 @@ class RunAllForecastsScriptTest(unittest.TestCase):
 
         self.assertIn('exec "$SCRIPT_DIR/run-forecasts.sh" "$@"', script)
 
+    def test_reproducible_suite_uses_static_windows_and_all_models(self):
+        script_path = Path(__file__).resolve().parents[2] / "run-reproducible-forecast-suite.sh"
+        script = script_path.read_text(encoding="utf-8")
+
+        self.assertIn('if [ "$#" -ne 0 ]; then', script)
+        self.assertIn('BACKTEST_FORECAST_START="2026-06-11T21:15:00Z"', script)
+        self.assertIn('FUTURE_FORECAST_START="2026-09-08T11:15:00Z"', script)
+        self.assertIn('FORECAST_RUN_LGBM=1', script)
+        self.assertIn('FORECAST_RUN_ENSEMBLE=1', script)
+        self.assertIn('quantile_calibrated_xgboost.py --base-url "$BASE_URL" --target generation', script)
+        self.assertIn('quantile_calibrated_xgboost.py --base-url "$BASE_URL" --target consumption', script)
+        self.assertIn('export_forecast_metrics.py --base-url "$BASE_URL" --target generation', script)
+        self.assertIn('export_forecast_metrics.py --base-url "$BASE_URL" --target consumption', script)
+
 
 if __name__ == "__main__":
     unittest.main()
