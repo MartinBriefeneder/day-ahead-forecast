@@ -24,7 +24,13 @@ DEFAULT_BACKTEST_START = "2025-09-01T00:00:00Z"
 DEFAULT_BACKTEST_END = "2026-05-31T22:00:00Z"
 DEFAULT_FORECAST_DAYS = 7
 DEFAULT_STEP_DAYS = 7
-DEFAULT_MODELS = ("weekly-persistence", "openstef-default-xgboost", "openstef-xgboost-tuned")
+DEFAULT_MODELS = (
+    "weekly-persistence",
+    "openstef-default-xgboost",
+    "openstef-xgboost-tuned",
+    "openstef-lgbm",
+    "openstef-custom-ensemble",
+)
 DEFAULT_TARGETS = ("generation", "consumption")
 ENERGY_DATA_START = "2025-05-31T22:00:00Z"
 ENERGY_DATA_END = "2026-06-30T22:00:00Z"

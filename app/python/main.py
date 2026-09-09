@@ -227,7 +227,7 @@ def build_run_id(target: str, model: str, forecast_start: datetime, forecast_end
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run simple benchmark energy forecasts.")
+    parser = argparse.ArgumentParser(description="Run the weekly persistence forecast baseline.")
     parser.add_argument("--base-url", default=BASE_URL)
     parser.add_argument("--target", choices=("consumption", "generation"), default=TARGET)
     parser.add_argument("--train-start", help="UTC ISO-8601 timestamp. Defaults to forecast-start minus train-days when forecast-start is set.")

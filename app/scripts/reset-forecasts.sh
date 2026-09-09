@@ -2,7 +2,8 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
-cd "$SCRIPT_DIR"
+APP_DIR=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
+cd "$APP_DIR"
 
 INFLUX_WAIT_SECONDS="${INFLUX_WAIT_SECONDS:-60}"
 FORECAST_MEASUREMENTS="energy_forecasts forecast_evaluations forecast_run_metadata"

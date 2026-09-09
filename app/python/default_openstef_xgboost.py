@@ -246,9 +246,9 @@ def main(argv: list[str] | None = None) -> None:
         forecast_end=forecast_end,
     )
     weather_features = FORECAST_WEATHER_FEATURES if future_run else WEATHER_FEATURES
-    log_step(f"{MODEL_NAME} data mode={'future' if future_run else 'backtest'} weather_features={','.join(weather_features)}")
+    log_step(f"{MODEL_NAME} data mode={'live' if future_run else 'backtest'} weather_features={','.join(weather_features)}")
     if future_run:
-        log_step(f"{MODEL_NAME} build future training frame")
+        log_step(f"{MODEL_NAME} build live training frame")
         train_dataset = time_series_dataset(
             build_future_training_frame(
                 base_url=args.base_url,
@@ -258,7 +258,7 @@ def main(argv: list[str] | None = None) -> None:
                 weather_path=args.weather_path,
             )
         )
-        log_step(f"{MODEL_NAME} build future prediction frame")
+        log_step(f"{MODEL_NAME} build live prediction frame")
         predict_dataset = time_series_dataset(
             build_future_prediction_frame(
                 base_url=args.base_url,
@@ -311,30 +311,9 @@ def main(argv: list[str] | None = None) -> None:
         forecast_end=forecast_end,
     )
 
-    weather_diagnostics = train_dataset.data.attrs.get("weather_diagnostics", {})
-    metadata = {
-        "generatedAt": format_utc(generated_at),
-        "target": args.target,
-        "model": MODEL_NAME,
-        "modelFamily": MODEL_FAMILY,
-        "trainStart": format_utc(train_start),
-        "trainEnd": format_utc(train_end),
-        "forecastStart": format_utc(forecast_start),
-        "forecastEnd": format_utc(forecast_end),
-        "sampleInterval": SAMPLE_INTERVAL,
-        "horizon": HORIZON,
-        "weatherPath": str(args.weather_path),
-        "weatherAlignment": weather_diagnostics.get("alignment", {}),
-        "xgboostHyperparameters": config.xgboost_hyperparams.model_dump(mode="json"),
-    }
-
-    log_step(f"{MODEL_NAME} write report files")
-    plot_path = write_run_files(Path(args.output_dir), payload, metadata)
-    payload["reportPath"] = str(plot_path)
     log_step(f"{MODEL_NAME} save run_id={payload['runId']}")
     save_payload(payload, base_url=args.base_url)
 
-    print(f"Wrote default OpenSTEF XGBoost comparison plot to {plot_path}")
     print(metric_summary(MODEL_NAME, metrics))
 
 

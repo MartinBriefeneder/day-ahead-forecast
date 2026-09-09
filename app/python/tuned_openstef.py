@@ -281,9 +281,9 @@ def main(argv: list[str] | None = None) -> None:
         forecast_end=forecast_end,
     )
     weather_features = FORECAST_WEATHER_FEATURES if future_run else WEATHER_FEATURES
-    log_step(f"openstef-xgboost-tuned batch data mode={'future' if future_run else 'backtest'} weather_features={','.join(weather_features)}")
+    log_step(f"openstef-xgboost-tuned batch data mode={'live' if future_run else 'backtest'} weather_features={','.join(weather_features)}")
     if future_run:
-        log_step("openstef-xgboost-tuned batch build future training frame")
+        log_step("openstef-xgboost-tuned batch build live training frame")
         train_dataset = time_series_dataset(
             build_future_training_frame(
                 base_url=args.base_url,
@@ -293,7 +293,7 @@ def main(argv: list[str] | None = None) -> None:
                 weather_path=args.weather_path,
             )
         )
-        log_step("openstef-xgboost-tuned batch build future prediction frame")
+        log_step("openstef-xgboost-tuned batch build live prediction frame")
         predict_dataset = time_series_dataset(
             build_future_prediction_frame(
                 base_url=args.base_url,
@@ -349,36 +349,10 @@ def main(argv: list[str] | None = None) -> None:
         forecast_end=forecast_end,
     )
 
-    weather_diagnostics = train_dataset.data.attrs.get("weather_diagnostics", {})
-    metadata = {
-        "generatedAt": format_utc(generated_at),
-        "target": args.target,
-        "trainStart": format_utc(train_start),
-        "trainEnd": format_utc(train_end),
-        "forecastStart": format_utc(forecast_start),
-        "forecastEnd": format_utc(forecast_end),
-        "sampleInterval": SAMPLE_INTERVAL,
-        "horizon": HORIZON,
-        "nTrials": args.n_trials,
-        "weatherPath": str(args.weather_path),
-        "weatherAlignment": weather_diagnostics.get("alignment", {}),
-        "tunedHyperparameters": tuned_config.xgboost_hyperparams.model_dump(mode="json"),
-        "tuning": {
-            "bestValue": study.best_value,
-            "bestParams": study.best_params,
-            "trialCount": len(study.trials),
-        },
-    }
-
     payloads = [tuned_payload]
-    log_step("openstef-xgboost-tuned batch write report files")
-    plot_path = write_run_files(Path(args.output_dir), payloads, metadata)
-    for payload in payloads:
-        payload["reportPath"] = str(plot_path)
     log_step("openstef-xgboost-tuned batch save payloads")
     save_payloads(payloads, base_url=args.base_url)
 
-    print(f"Wrote tuning comparison plot to {plot_path}")
     print(metric_summary("openstef-xgboost-tuned", tuned_metrics))
     print(f"Best rCRPS:  {study.best_value:.4f}")
 

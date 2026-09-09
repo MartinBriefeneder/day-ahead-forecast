@@ -2,7 +2,8 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
-cd "$SCRIPT_DIR"
+APP_DIR=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
+cd "$APP_DIR"
 
 DEFAULT_INFLUXDB_TOKEN="apiv3_OkmfXNXtBPcrAZHrJ-HT5Xs8_UpxwFJS2iwaG8Lv3Uioiy40hrk_75A0WFrLxd6E92T3jg7oSDLZUlITwcR0Hg"
 START_STACK="${ENERGY_AVAILABILITY_START_STACK:-1}"
@@ -42,7 +43,7 @@ mkdir -p "$MAVEN_REPOSITORY"
 docker run --rm \
   --network "$COMPOSE_NETWORK" \
   --user "$(id -u):$(id -g)" \
-  --volume "$SCRIPT_DIR/quarkus:/workspace" \
+  --volume "$APP_DIR/quarkus:/workspace" \
   --volume "$MAVEN_REPOSITORY:/maven-repository" \
   --workdir /workspace \
   "$MAVEN_IMAGE" \

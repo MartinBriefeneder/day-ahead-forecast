@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from rolling_backtest import (
+    DEFAULT_MODELS,
     RollingWindow,
     command_for,
     filter_valid_windows,
@@ -107,6 +108,18 @@ class RollingBacktestTest(unittest.TestCase):
         self.assertIn("main.py", command)
         self.assertIn("--save", command)
         self.assertIn("2025-09-01T00:00:00Z", command)
+
+    def test_default_models_include_openstef_comparison_approaches(self):
+        self.assertEqual(
+            (
+                "weekly-persistence",
+                "openstef-default-xgboost",
+                "openstef-xgboost-tuned",
+                "openstef-lgbm",
+                "openstef-custom-ensemble",
+            ),
+            DEFAULT_MODELS,
+        )
 
     def test_write_run_summary_includes_diagnostics(self):
         window = RollingWindow(

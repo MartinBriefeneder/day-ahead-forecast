@@ -219,7 +219,7 @@ def main(argv: list[str] | None = None) -> None:
         forecast_end=forecast_end,
     )
     weather_features = FORECAST_WEATHER_FEATURES if future_run else WEATHER_FEATURES
-    log_step(f"{MODEL_NAME} data mode={'future' if future_run else 'backtest'} weather_features={','.join(weather_features)}")
+    log_step(f"{MODEL_NAME} data mode={'live' if future_run else 'backtest'} weather_features={','.join(weather_features)}")
     if future_run:
         train_dataset = time_series_dataset(
             build_future_training_frame(
@@ -275,27 +275,8 @@ def main(argv: list[str] | None = None) -> None:
         forecast_start=forecast_start,
         forecast_end=forecast_end,
     )
-    weather_diagnostics = train_dataset.data.attrs.get("weather_diagnostics", {})
-    metadata = {
-        "generatedAt": format_utc(generated_at),
-        "target": args.target,
-        "model": MODEL_NAME,
-        "modelFamily": MODEL_FAMILY,
-        "trainStart": format_utc(train_start),
-        "trainEnd": format_utc(train_end),
-        "forecastStart": format_utc(forecast_start),
-        "forecastEnd": format_utc(forecast_end),
-        "sampleInterval": SAMPLE_INTERVAL,
-        "horizon": HORIZON,
-        "weatherPath": str(args.weather_path),
-        "weatherAlignment": weather_diagnostics.get("alignment", {}),
-        "lgbmHyperparameters": config.lgbm_hyperparams.model_dump(mode="json"),
-    }
-    plot_path = write_run_files(Path(args.output_dir), payload, metadata)
-    payload["reportPath"] = str(plot_path)
     save_payload(payload, base_url=args.base_url)
 
-    print(f"Wrote LightGBM comparison plot to {plot_path}")
     print(metric_summary(MODEL_NAME, metrics))
 
 

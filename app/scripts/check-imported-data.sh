@@ -2,7 +2,8 @@
 set -euo pipefail
 
 script_dir="$(CDPATH= cd "$(dirname "$0")" && pwd)"
-cd "$script_dir"
+app_dir="$(CDPATH= cd "$script_dir/.." && pwd)"
+cd "$app_dir"
 
 if [ -f ./.env ]; then
   set -a
@@ -45,7 +46,9 @@ export INFLUXDB_TOKEN INFLUXDB_ORG INFLUXDB_BUCKET
 mkdir -p "$report_dir"
 import_dir="$(realpath "$csv_directory")"
 report_dir_abs="$(realpath "$report_dir")"
-validation_report="$report_dir_abs/energy-csv-validation-report.md"
+validation_temp_dir="$(mktemp -d)"
+trap 'rm -rf "$validation_temp_dir"' EXIT
+validation_report="$validation_temp_dir/energy-csv-validation-report.txt"
 overall_count_csv="$report_dir_abs/influx-energy-values-count.csv"
 breakdown_count_csv="$report_dir_abs/influx-energy-values-direction-category-count.csv"
 expected_file_counts_tsv="$report_dir_abs/expected-file-counts.tsv"
@@ -97,10 +100,10 @@ run_validation_report() {
   docker compose --profile import run --rm \
     --user "$(id -u):$(id -g)" \
     --volume "$import_dir:/import-data:ro" \
-    --volume "$report_dir_abs:/check-output" \
+    --volume "$validation_temp_dir:/check-output" \
     --entrypoint /bin/sh \
     importer \
-    -c 'java -Dquarkus.http.host=127.0.0.1 -Dquarkus.http.port=0 -Denergy.validation.input=/import-data -Denergy.validation.report=/check-output/energy-csv-validation-report.md -jar /deployments/quarkus-run.jar'
+    -c 'java -Dquarkus.http.host=127.0.0.1 -Dquarkus.http.port=0 -Denergy.validation.input=/import-data -Denergy.validation.report=/check-output/energy-csv-validation-report.txt -jar /deployments/quarkus-run.jar'
 }
 
 parse_expected_value() {
@@ -346,7 +349,7 @@ expected_series="$(parse_expected_value "Series parsed")"
 validation_errors="$(parse_expected_value "Errors")"
 
 if [ "$validation_errors" != "0" ]; then
-  printf '[data-check] CSV validation reported %s error(s). See %s\n' "$validation_errors" "$validation_report" >&2
+  printf '[data-check] CSV validation reported %s error(s).\n' "$validation_errors" >&2
   exit 1
 fi
 

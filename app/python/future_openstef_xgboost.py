@@ -234,7 +234,7 @@ def api_payload(
     if forecast.empty:
         raise ValueError("Forecast output is empty for the requested forecast window.")
     if forecast.isna().any():
-        raise ValueError("Forecast output contains missing values and cannot be saved as a future forecast.")
+        raise ValueError("Forecast output contains missing values and cannot be saved as a live forecast.")
     metrics = {
         "forecast_intervals": int(len(forecast)),
         "total_forecast_kwh": float(forecast.sum()),
@@ -286,7 +286,7 @@ def write_forecast_plot(output_dir: Path, payload: dict[str, Any]) -> Path:
         )
     )
     fig.update_layout(
-        title=f"Future OpenSTEF {target_label} Forecast With Gridoo Weather",
+        title=f"Live OpenSTEF {target_label} Forecast With Gridoo Weather",
         xaxis_title="Time (UTC)",
         yaxis_title=f"{target_label} energy (kWh per 15-minute interval)",
         hovermode="x unified",
@@ -305,7 +305,7 @@ def save_payload(payload: dict[str, Any], *, base_url: str) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run a future OpenSTEF XGBoost forecast with Gridoo forecast weather.")
+    parser = argparse.ArgumentParser(description="Run a live OpenSTEF XGBoost forecast with Gridoo forecast weather.")
     parser.add_argument("--base-url", default=BASE_URL)
     parser.add_argument("--target", default=DEFAULT_TARGET, choices=("generation", "consumption"))
     parser.add_argument("--train-start", default=DEFAULT_TRAIN_START)
@@ -331,7 +331,7 @@ def main(argv: list[str] | None = None) -> None:
     forecast_start = parse_utc(args.forecast_start) if args.forecast_start else next_quarter_hour()
     forecast_end = forecast_start + timedelta(days=args.forecast_days)
     if train_end > forecast_start:
-        raise ValueError("Training window must end before or at forecast-start for a true future forecast.")
+        raise ValueError("Training window must end before or at forecast-start for a live forecast.")
 
     training_frame = build_training_frame(
         base_url=args.base_url,
@@ -374,7 +374,7 @@ def main(argv: list[str] | None = None) -> None:
     if not args.no_save:
         save_payload(payload, base_url=args.base_url)
 
-    print(f"Wrote future forecast plot to {plot_path}")
+    print(f"Wrote live forecast plot to {plot_path}")
     print(f"{MODEL_NAME}: {len(payload['points'])} intervals, total={dict((item['name'], item['value']) for item in payload['metrics'])['total_forecast_kwh']:.4f} kWh")
 
 

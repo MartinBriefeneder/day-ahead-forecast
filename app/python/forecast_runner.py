@@ -145,7 +145,7 @@ def resolve_training_window_for_forecast(
         resolved_train_start = forecast_start - timedelta(days=train_days)
     resolved_train_end = resolved_train_start + timedelta(days=train_days)
     if forecast_start_is_future(forecast_start) and resolved_train_end > forecast_start:
-        raise ValueError("Training window must end before or at forecast-start for a future forecast.")
+        raise ValueError("Training window must end before or at forecast-start for a live forecast.")
     if not forecast_start_is_future(forecast_start):
         resolved_train_end = forecast_start
     if not resolved_train_end > resolved_train_start:

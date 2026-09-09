@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 class RunAllForecastsScriptTest(unittest.TestCase):
-    def test_batch_runner_includes_future_forecast_before_comparison(self):
+    def test_batch_runner_includes_live_forecast_before_comparison(self):
         script_path = Path(__file__).resolve().parents[2] / "run-forecasts.sh"
         lines = script_path.read_text(encoding="utf-8").splitlines()
         commands = [line.strip() for line in lines if line.strip().startswith("run_forecast_step ") and ".py" in line]
@@ -12,25 +12,29 @@ class RunAllForecastsScriptTest(unittest.TestCase):
             [
                 'run_forecast_step "weekly-persistence $current_target" python3 main.py "${common_args[@]}" --save',
                 'run_forecast_step "default-openstef-xgboost $current_target" python3 default_openstef_xgboost.py "${common_args[@]}"',
-                'run_forecast_step "tuned-openstef-xgboost $current_target" python3 tuned_openstef.py "${common_args[@]}"',
+                'run_forecast_step "live-openstef-xgboost $current_target" python3 future_openstef_xgboost.py "${common_args[@]}"',
             ],
             commands[:3],
         )
         self.assertEqual(
-            'run_forecast_step "openstef-lgbm $current_target" python3 lgbm_openstef.py "${common_args[@]}"',
+            'run_forecast_step "tuned-openstef-xgboost $current_target" python3 tuned_openstef.py "${common_args[@]}"',
             commands[3],
         )
         self.assertEqual(
-            'run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"',
+            'run_forecast_step "openstef-lgbm $current_target" python3 lgbm_openstef.py "${common_args[@]}"',
             commands[4],
         )
         self.assertEqual(
-            'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
+            'run_forecast_step "custom-openstef $current_target" python3 custom_openstef.py "${common_args[@]}"',
             commands[5],
         )
         self.assertEqual(
-            'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved',
+            'run_forecast_step "compare-window $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --forecast-start "$forecast_start" --forecast-end "$forecast_end"',
             commands[6],
+        )
+        self.assertEqual(
+            'run_forecast_step "compare-all-saved $current_target" python3 compare_forecasts.py --base-url "$base_url" --target "$current_target" --all-saved',
+            commands[7],
         )
 
     def test_batch_runner_exposes_shared_forecast_window_options(self):
@@ -47,8 +51,10 @@ class RunAllForecastsScriptTest(unittest.TestCase):
         self.assertIn('FORECAST_COMPARE_ALL_SAVED=1', script)
         self.assertIn('FORECAST_RUN_LGBM=1', script)
         self.assertIn('FORECAST_RUN_ENSEMBLE=1', script)
+        self.assertIn('FORECAST_RUN_FUTURE_XGBOOST=1', script)
         self.assertIn('if is_enabled "$run_lgbm"; then', script)
         self.assertIn('if is_enabled "$run_ensemble"; then', script)
+        self.assertIn('if is_enabled "$run_future_xgboost"; then', script)
         self.assertIn('if is_enabled "$compare_all_saved"; then', script)
 
     def test_legacy_batch_runner_delegates_to_forecast_runner(self):
@@ -57,20 +63,21 @@ class RunAllForecastsScriptTest(unittest.TestCase):
 
         self.assertIn('exec "$SCRIPT_DIR/run-forecasts.sh" "$@"', script)
 
-    def test_reproducible_suite_uses_static_windows_and_all_models(self):
-        script_path = Path(__file__).resolve().parents[2] / "run-reproducible-forecast-suite.sh"
+    def test_fixed_window_suite_uses_static_windows_and_all_models(self):
+        script_path = Path(__file__).resolve().parents[2] / "scripts" / "run-fixed-window-forecast-suite.sh"
         script = script_path.read_text(encoding="utf-8")
 
         self.assertIn('if [ "$#" -ne 0 ]; then', script)
         self.assertIn('BACKTEST_FORECAST_START="2026-06-11T21:15:00Z"', script)
-        self.assertIn('FUTURE_FORECAST_START="2026-09-08T11:15:00Z"', script)
+        self.assertIn('LIVE_FORECAST_START="2026-09-08T11:15:00Z"', script)
         self.assertIn('FORECAST_RUN_LGBM=1', script)
         self.assertIn('FORECAST_RUN_ENSEMBLE=1', script)
+        self.assertIn('FORECAST_RUN_FUTURE_XGBOOST=1', script)
+        self.assertIn('FORECAST_RUN_FUTURE_XGBOOST=0', script)
         self.assertIn('LOG_DIR="$REPORT_DIR/logs"', script)
         self.assertIn('2>&1 | tee "$log_file"', script)
-        self.assertIn('run_logged future-saved-models env', script)
-        self.assertIn('quantile_calibrated_xgboost.py --base-url "$BASE_URL" --target generation', script)
-        self.assertIn('quantile_calibrated_xgboost.py --base-url "$BASE_URL" --target consumption', script)
+        self.assertIn('run_logged live-saved-models env', script)
+        self.assertNotIn('quantile_calibrated_xgboost.py', script)
         self.assertIn('export_forecast_metrics.py --base-url "$BASE_URL" --target generation', script)
         self.assertIn('export_forecast_metrics.py --base-url "$BASE_URL" --target consumption', script)
 

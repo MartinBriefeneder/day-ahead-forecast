@@ -188,15 +188,13 @@ def parse_utc(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
-def write_metric_table_files(output_dir: Path, target: str, rows: list[dict[str, Any]], *, all_saved: bool = False) -> tuple[Path, Path]:
+def write_metric_table_files(output_dir: Path, target: str, rows: list[dict[str, Any]], *, all_saved: bool = False) -> Path:
     require_rows(rows)
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = f"{target}-{'all-saved-' if all_saved else ''}forecast-metric-table"
-    markdown_path = timestamped_report_path(output_dir, stem, suffix=".md")
-    csv_path = markdown_path.with_suffix(".csv")
-    markdown_path.write_text(markdown_table(rows), encoding="utf-8")
+    csv_path = timestamped_report_path(output_dir, stem, suffix=".csv")
     write_csv(csv_path, rows)
-    return markdown_path, csv_path
+    return csv_path
 
 
 def aggregate_metric_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -225,33 +223,13 @@ def aggregate_metric_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return aggregates
 
 
-def write_aggregate_metric_files(output_dir: Path, target: str, rows: list[dict[str, Any]], *, all_saved: bool = False) -> tuple[Path, Path]:
+def write_aggregate_metric_files(output_dir: Path, target: str, rows: list[dict[str, Any]], *, all_saved: bool = False) -> Path:
     aggregates = aggregate_metric_rows(rows)
     require_rows(aggregates)
     stem = f"{target}-{'all-saved-' if all_saved else ''}forecast-aggregate-metrics"
-    markdown_path = timestamped_report_path(output_dir, stem, suffix=".md")
-    csv_path = markdown_path.with_suffix(".csv")
-    markdown_path.write_text(markdown_table_for_columns(aggregates, AGGREGATE_COLUMNS, "# Forecast Aggregate Metrics"), encoding="utf-8")
+    csv_path = timestamped_report_path(output_dir, stem, suffix=".csv")
     write_csv_for_columns(csv_path, aggregates, AGGREGATE_COLUMNS)
-    return markdown_path, csv_path
-
-
-def markdown_table(rows: list[dict[str, Any]]) -> str:
-    require_rows(rows)
-    return markdown_table_for_columns(rows, TABLE_COLUMNS, "# Forecast Metric Table")
-
-
-def markdown_table_for_columns(rows: list[dict[str, Any]], columns: list[str], title: str) -> str:
-    lines = [
-        title,
-        "",
-        "| " + " | ".join(columns) + " |",
-        "| " + " | ".join("---" for _ in columns) + " |",
-    ]
-    for row in rows:
-        lines.append("| " + " | ".join(format_cell(row.get(column)) for column in columns) + " |")
-    lines.append("")
-    return "\n".join(lines)
+    return csv_path
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -298,11 +276,6 @@ def first_present(rows: list[dict[str, Any]], column: str) -> object:
     return None
 
 
-def format_cell(value: object) -> str:
-    text = format_csv_cell(value)
-    return text.replace("|", "\\|")
-
-
 def format_csv_cell(value: object) -> str:
     if value is None:
         return ""
@@ -317,7 +290,7 @@ def require_rows(rows: list[dict[str, Any]]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Export saved forecast-run metrics as Markdown and CSV tables.")
+    parser = argparse.ArgumentParser(description="Export saved forecast-run metrics as CSV tables.")
     parser.add_argument("--base-url", default=BASE_URL)
     parser.add_argument("--target", default="generation", choices=("generation", "consumption"))
     parser.add_argument("--forecast-start")
@@ -350,22 +323,20 @@ def main(argv: list[str] | None = None) -> None:
         timeout_seconds=TIMEOUT_SECONDS,
         require_complete=args.require_complete,
     )
-    markdown_path, csv_path = write_metric_table_files(
+    csv_path = write_metric_table_files(
         Path(args.output_dir),
         args.target,
         rows,
         all_saved=args.all_saved,
     )
-    print(f"Wrote forecast metric table to {markdown_path}")
     print(f"Wrote forecast metric CSV to {csv_path}")
     if args.aggregate:
-        aggregate_markdown_path, aggregate_csv_path = write_aggregate_metric_files(
+        aggregate_csv_path = write_aggregate_metric_files(
             Path(args.output_dir),
             args.target,
             rows,
             all_saved=args.all_saved,
         )
-        print(f"Wrote forecast aggregate metrics to {aggregate_markdown_path}")
         print(f"Wrote forecast aggregate CSV to {aggregate_csv_path}")
 
 

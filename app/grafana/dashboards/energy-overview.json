@@ -166,7 +166,7 @@
           "refId": "A"
         }
       ],
-      "title": "Effektiv an die Gemeinschaft geliefert",
+      "title": "An Gemeinschaft",
       "type": "stat"
     },
     {
@@ -215,7 +215,7 @@
           "refId": "A"
         }
       ],
-      "title": "Effektiv aus der Gemeinschaft bezogen",
+      "title": "Aus Gemeinschaft",
       "type": "stat"
     },
     {
@@ -264,7 +264,7 @@
           "refId": "A"
         }
       ],
-      "title": "Restlicher Netzbezug",
+      "title": "Netzbezug",
       "type": "stat"
     },
     {
@@ -313,7 +313,7 @@
           "refId": "A"
         }
       ],
-      "title": "Restliche Einspeisung",
+      "title": "Netzeinspeisung",
       "type": "stat"
     },
     {
@@ -470,7 +470,7 @@
           "refId": "B"
         }
       ],
-      "title": "Summe Effektiv an Gemeinschaft geliefert Energie | Summe Effektiv aus Gemeinschaft bezogen [kWh]",
+      "title": "Gemeinschaftsenergie",
       "type": "timeseries"
     },
     {
@@ -533,7 +533,7 @@
           "refId": "B"
         }
       ],
-      "title": "Restbezug und Resteinspeisung",
+      "title": "Restenergie",
       "type": "timeseries"
     },
     {
@@ -596,7 +596,7 @@
           "refId": "B"
         }
       ],
-      "title": "Tägliche Erzeugung und täglicher Verbrauch",
+      "title": "Tageswerte",
       "type": "timeseries"
     },
     {
@@ -659,7 +659,7 @@
           "refId": "B"
         }
       ],
-      "title": "Tägliche gemeinschaftswirksame Energie",
+      "title": "Gemeinschaft täglich",
       "type": "timeseries"
     },
     {
@@ -722,7 +722,173 @@
           "refId": "B"
         }
       ],
-      "title": "Täglicher Restbezug und tägliche Resteinspeisung",
+      "title": "Tägliche Restenergie",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "kWh"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Ist-Erzeugung"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F59E0B",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Ist-Erzeugung",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"DELIVERY\" and r.category == \"total\")\n  |> group(columns: [\"_time\"])\n  |> sum(column: \"_value\")\n  |> group()\n  |> rename(columns: {_value: \"Ist-Erzeugung\"})\n  |> keep(columns: [\"_time\", \"Ist-Erzeugung\"])",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Prognosen",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "latestRuns = from(bucket: v.defaultBucket)\n  |> range(start: time(v: \"1970-01-01T00:00:00Z\"))\n  |> filter(fn: (r) => r._measurement == \"forecast_run_metadata\" and r._field == \"generated_at\")\n  |> filter(fn: (r) => r.target == \"generation\")\n  |> group(columns: [\"target\", \"model\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 1)\n  |> keep(columns: [\"run_id\", \"target\", \"model\"])\nforecasts = from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_forecasts\" and r._field == \"forecast_kwh\")\n  |> filter(fn: (r) => r.target == \"generation\")\njoin(tables: {forecasts: forecasts, latestRuns: latestRuns}, on: [\"run_id\", \"target\", \"model\"])\n  |> group(columns: [\"_time\", \"model\"])\n  |> mean(column: \"_value\")\n  |> group()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"model\"], valueColumn: \"_value\")",
+          "rawQuery": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Prognose: Erzeugung",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-energy"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 3,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "kWh"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Ist-Verbrauch"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#2563EB",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "alias": "Ist-Verbrauch",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_values\" and r._field == \"value_kwh\")\n  |> filter(fn: (r) => r.direction == \"CONSUMPTION\" and r.category == \"total\")\n  |> group(columns: [\"_time\"])\n  |> sum(column: \"_value\")\n  |> group()\n  |> rename(columns: {_value: \"Ist-Verbrauch\"})\n  |> keep(columns: [\"_time\", \"Ist-Verbrauch\"])",
+          "rawQuery": true,
+          "refId": "A"
+        },
+        {
+          "alias": "Prognosen",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-energy"
+          },
+          "query": "latestRuns = from(bucket: v.defaultBucket)\n  |> range(start: time(v: \"1970-01-01T00:00:00Z\"))\n  |> filter(fn: (r) => r._measurement == \"forecast_run_metadata\" and r._field == \"generated_at\")\n  |> filter(fn: (r) => r.target == \"consumption\")\n  |> group(columns: [\"target\", \"model\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 1)\n  |> keep(columns: [\"run_id\", \"target\", \"model\"])\nforecasts = from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"energy_forecasts\" and r._field == \"forecast_kwh\")\n  |> filter(fn: (r) => r.target == \"consumption\")\njoin(tables: {forecasts: forecasts, latestRuns: latestRuns}, on: [\"run_id\", \"target\", \"model\"])\n  |> group(columns: [\"_time\", \"model\"])\n  |> mean(column: \"_value\")\n  |> group()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"model\"], valueColumn: \"_value\")",
+          "rawQuery": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Prognose: Verbrauch",
       "type": "timeseries"
     }
   ],
