@@ -49,7 +49,7 @@ public class EnergySeriesRepository {
     @ConfigProperty(name = "energy.influx.write-batch-size", defaultValue = "10000")
     int writeBatchSize;
 
-    @ConfigProperty(name = "energy.influx.forecast-dataset-query-window", defaultValue = "P1D")
+    @ConfigProperty(name = "energy.influx.forecast-dataset-query-window", defaultValue = "P7D")
     Duration forecastDatasetQueryWindow;
 
     public void saveAll(List<EnergySeries> series) throws Exception {

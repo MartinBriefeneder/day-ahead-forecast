@@ -105,7 +105,11 @@ run_forecast_step() {
   local status
   shift
   printf '[forecast-batch] start %s\n' "$label"
-  if "$@"; then
+  set +e
+  "$@"
+  status="$?"
+  set -e
+  if [ "$status" -eq 0 ]; then
     successful_steps=$((successful_steps + 1))
     case "$label" in
       compare-*)
@@ -118,7 +122,6 @@ run_forecast_step() {
     return 0
   fi
 
-  status="$?"
   failed_steps=$((failed_steps + 1))
   printf '[forecast-batch] failed %s exit=%s\n' "$label" "$status" >&2
   case "$continue_on_error" in

@@ -30,8 +30,8 @@ class ForecastDatasetResourceTest {
 
         given()
                 .queryParam("target", "consumption")
-                .queryParam("from", "2025-06-01T00:00:00Z")
-                .queryParam("to", "2025-06-02T00:00:00Z")
+                .queryParam("from", "2025-06-03T00:00:00Z")
+                .queryParam("to", "2025-06-04T00:00:00Z")
                 .when().get("/api/forecast-datasets")
                 .then()
                 .statusCode(200)

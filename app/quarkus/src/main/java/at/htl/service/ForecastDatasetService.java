@@ -13,15 +13,19 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 @ApplicationScoped
 public class ForecastDatasetService {
 
     private static final String SAMPLE_INTERVAL = "PT15M";
     private static final String UNIT = "kWh";
+    private static final int MAX_CACHE_ENTRIES = 32;
 
     @Inject
     EnergySeriesRepository energySeriesRepository;
+
+    private final ConcurrentHashMap<DatasetCacheKey, ForecastDatasetResponse> datasetCache = new ConcurrentHashMap<>();
 
     public ForecastDatasetResponse getDataset(String targetValue, String fromValue, String toValue) throws Exception {
         ForecastDatasetTarget target = ForecastDatasetTarget.parse(requirePresent("target", targetValue));
@@ -29,11 +33,22 @@ public class ForecastDatasetService {
         Instant to = parseInstant("to", toValue);
         validateRange(from, to);
 
+        DatasetCacheKey cacheKey = new DatasetCacheKey(target, from, to);
+        ForecastDatasetResponse cached = datasetCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
         List<ForecastDatasetPoint> points = energySeriesRepository.findForecastDataset(target.direction(), from, to).stream()
                 .map(value -> toPoint(target, value))
                 .toList();
 
-        return new ForecastDatasetResponse(SAMPLE_INTERVAL, target.columnName(), UNIT, points);
+        ForecastDatasetResponse response = new ForecastDatasetResponse(SAMPLE_INTERVAL, target.columnName(), UNIT, points);
+        if (datasetCache.size() >= MAX_CACHE_ENTRIES) {
+            datasetCache.clear();
+        }
+        ForecastDatasetResponse existing = datasetCache.putIfAbsent(cacheKey, response);
+        return existing != null ? existing : response;
     }
 
     private ForecastDatasetPoint toPoint(ForecastDatasetTarget target, ForecastDatasetValue value) {
@@ -60,5 +75,8 @@ public class ForecastDatasetService {
         if (!to.isAfter(from)) {
             throw new IllegalArgumentException("Query parameter to must be after from.");
         }
+    }
+
+    private record DatasetCacheKey(ForecastDatasetTarget target, Instant from, Instant to) {
     }
 }

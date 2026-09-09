@@ -41,6 +41,19 @@ class ForecastDatasetServiceTest {
     }
 
     @Test
+    void repeatedDatasetRequestUsesCachedResponse() throws Exception {
+        StubRepository repository = new StubRepository(List.of(
+                new ForecastDatasetValue(Instant.parse("2025-06-01T00:00:00Z"), 10.0)
+        ));
+        ForecastDatasetService service = serviceWithRepository(repository);
+
+        service.getDataset("consumption", "2025-06-01T00:00:00Z", "2025-06-02T00:00:00Z");
+        service.getDataset("consumption", "2025-06-01T00:00:00Z", "2025-06-02T00:00:00Z");
+
+        assertEquals(1, repository.calls);
+    }
+
+    @Test
     void rejectsInvalidRequestParameters() throws Exception {
         ForecastDatasetService service = serviceWithRepository(new StubRepository(List.of()));
 
@@ -64,6 +77,7 @@ class ForecastDatasetServiceTest {
     private static class StubRepository extends EnergySeriesRepository {
         private final List<ForecastDatasetValue> values;
         private DirectionType direction;
+        private int calls;
 
         private StubRepository(List<ForecastDatasetValue> values) {
             this.values = values;
@@ -71,6 +85,7 @@ class ForecastDatasetServiceTest {
 
         @Override
         public List<ForecastDatasetValue> findForecastDataset(DirectionType direction, Instant from, Instant to) {
+            calls++;
             this.direction = direction;
             return values;
         }
