@@ -99,6 +99,18 @@ services:
       PYTHONUNBUFFERED: "1"
     volumes:
       - type: bind
+        source: ./python
+        target: /app/python
+        read_only: true
+      - type: bind
+        source: ./run-forecasts.sh
+        target: /app/run-forecasts.sh
+        read_only: true
+      - type: bind
+        source: ./run-all-forecasts.sh
+        target: /app/run-all-forecasts.sh
+        read_only: true
+      - type: bind
         source: ./data
         target: /app/data
         read_only: true
