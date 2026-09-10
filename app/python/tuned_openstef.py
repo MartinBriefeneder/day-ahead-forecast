@@ -31,6 +31,7 @@ from forecast_runner import (
     require_positive_int,
     resolve_forecast_window,
     run_id_for_model,
+    suppress_openstef_sklearn_nan_warnings,
     timestamped_report_path,
 )
 from future_openstef_xgboost import build_prediction_frame as build_future_prediction_frame
@@ -95,7 +96,8 @@ def fit_tuned(train_dataset, *, n_trials: int, show_progress_bar: bool, weather_
         n_trials=n_trials,
         seed=42,
     )
-    result = tuner.fit_with_tuning(show_progress_bar=show_progress_bar)
+    with suppress_openstef_sklearn_nan_warnings():
+        result = tuner.fit_with_tuning(show_progress_bar=show_progress_bar)
     return result.workflow, result.best_config, result.study
 
 
@@ -150,7 +152,8 @@ def forecast_payload(
     forecast_start: datetime,
     forecast_end: datetime,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    forecast = workflow.predict(predict_dataset, forecast_start=forecast_start)
+    with suppress_openstef_sklearn_nan_warnings():
+        forecast = workflow.predict(predict_dataset, forecast_start=forecast_start)
     actual = predict_dataset.data[target].sort_index()
     actual = actual[(actual.index >= forecast_start) & (actual.index < forecast_end)]
     metrics, comparison = compute_metrics(forecast.median_series.rename("forecast_kwh"), actual)

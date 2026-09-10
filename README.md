@@ -2,7 +2,31 @@
 
 ## What You Need
 
+- Git
 - Docker
+
+## Setup
+
+```sh
+git clone <repo-url> day-ahead-forecast
+cd day-ahead-forecast/app
+./run-server.sh
+./reset-and-import-data.sh
+docker compose --profile forecasts run --rm forecast-runner \
+  --base-url http://forecast-backend:8080 \
+  --target all \
+  --forecast-start 2025-10-01T00:00:00Z \
+  --forecast-days 7
+```
+
+This creates one week of saved generation and consumption forecasts.
+
+For a historical backtest, choose a `--forecast-start` inside the imported CSV data range.
+
+For a true future forecast, the weather forecast input must also be available. If the live weather step fails, the batch continues by default and still saves successful model runs.
+
+Reports are written to `app/reports/forecast-runs/`.
+Saved forecast runs are available through Grafana and the backend API.
 
 ## Start The App
 
@@ -96,4 +120,3 @@ Grafana: `http://localhost:3000`
 
 - Dashboards work without login.
 - If login is needed: `admin` / `admin`.
-

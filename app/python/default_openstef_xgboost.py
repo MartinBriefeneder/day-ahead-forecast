@@ -30,6 +30,7 @@ from forecast_runner import (
     prediction_context_start,
     resolve_forecast_window,
     run_id_for_model,
+    suppress_openstef_sklearn_nan_warnings,
     timestamped_report_path,
 )
 from future_openstef_xgboost import build_prediction_frame as build_future_prediction_frame
@@ -113,7 +114,8 @@ def forecast_payload(
     forecast_start: datetime,
     forecast_end: datetime,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    forecast = workflow.predict(predict_dataset, forecast_start=forecast_start)
+    with suppress_openstef_sklearn_nan_warnings():
+        forecast = workflow.predict(predict_dataset, forecast_start=forecast_start)
     actual = predict_dataset.data[target].sort_index()
     actual = actual[(actual.index >= forecast_start) & (actual.index < forecast_end)]
     metrics, comparison = compute_metrics(forecast.median_series.rename("forecast_kwh"), actual)
@@ -296,7 +298,8 @@ def main(argv: list[str] | None = None) -> None:
     log_step(f"{MODEL_NAME} create workflow")
     workflow, config = create_default_openstef_xgboost_workflow(args.target, weather_features)
     log_step(f"{MODEL_NAME} fit workflow")
-    workflow.fit(train_dataset)
+    with suppress_openstef_sklearn_nan_warnings():
+        workflow.fit(train_dataset)
 
     generated_at = datetime.now(timezone.utc)
     log_step(f"{MODEL_NAME} predict and build payload")

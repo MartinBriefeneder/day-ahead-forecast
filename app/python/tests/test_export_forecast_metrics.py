@@ -128,7 +128,7 @@ class ExportForecastMetricsTest(unittest.TestCase):
         self.assertEqual(["run-1", "run-2"], [summary["runId"] for summary in selected])
         self.assertEqual("new.html", selected[0]["reportPath"])
 
-    def test_write_metric_table_files_writes_csv(self):
+    def test_write_metric_table_files_writes_markdown(self):
         rows = [
             {
                 "run_id": "run-1",
@@ -144,11 +144,12 @@ class ExportForecastMetricsTest(unittest.TestCase):
             }
         ]
         with TemporaryDirectory() as directory:
-            csv_path = write_metric_table_files(Path(directory), "generation", rows)
+            markdown_path = write_metric_table_files(Path(directory), "generation", rows)
 
-            self.assertTrue(csv_path.exists())
-            self.assertIn("weekly-persistence", csv_path.read_text(encoding="utf-8"))
-            self.assertEqual([], list(Path(directory).glob("*.md")))
+            self.assertTrue(markdown_path.exists())
+            self.assertEqual(".md", markdown_path.suffix)
+            self.assertIn("weekly-persistence", markdown_path.read_text(encoding="utf-8"))
+            self.assertEqual([], list(Path(directory).glob("*.csv")))
 
     def test_require_rows_reports_no_matching_runs(self):
         with self.assertRaisesRegex(ValueError, "No metric rows to write"):

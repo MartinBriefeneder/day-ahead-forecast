@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -177,23 +176,38 @@ def run_model_step(model: str, *, target: str, window: RollingWindow, base_url: 
 
 def write_run_summary(output_dir: Path, results: list[StepResult], diagnostics: list[str]) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    path = timestamped_report_path(output_dir, "rolling-backtest-summary", suffix=".csv")
-    with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(["target", "model", "forecast_start", "forecast_end", "status", "returncode", "message"])
-        for result in results:
-            writer.writerow([
-                result.target,
-                result.model,
-                format_utc(result.window.forecast_start),
-                format_utc(result.window.forecast_end),
-                result.status,
-                result.returncode,
-                result.message,
-            ])
-        for diagnostic in diagnostics:
-            writer.writerow(["", "", "", "", "diagnostic", "", diagnostic])
+    path = timestamped_report_path(output_dir, "rolling-backtest-summary", suffix=".md")
+    lines = [
+        "# Rolling Backtest Summary",
+        "",
+        "| Target | Model | Forecast Start | Forecast End | Status | Return Code | Message |",
+        "|---|---|---|---|---|---:|---|",
+    ]
+    for result in results:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    result.target,
+                    result.model,
+                    format_utc(result.window.forecast_start),
+                    format_utc(result.window.forecast_end),
+                    result.status,
+                    str(result.returncode),
+                    markdown_cell(result.message),
+                ]
+            )
+            + " |"
+        )
+    if diagnostics:
+        lines.extend(["", "## Diagnostics", ""])
+        lines.extend(f"- {diagnostic}" for diagnostic in diagnostics)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+def markdown_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
 
 
 def format_window(window: RollingWindow) -> str:

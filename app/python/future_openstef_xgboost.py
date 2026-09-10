@@ -26,6 +26,7 @@ from forecast_runner import (
     prediction_context_start,
     require_positive_int,
     run_id_for_model,
+    suppress_openstef_sklearn_nan_warnings,
     timestamped_report_path,
 )
 from weather_features import DEFAULT_GRIDOO_LOCATION_ID, DEFAULT_WEATHER_PATH, add_weather_features, fetch_gridoo_forecast
@@ -355,8 +356,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Forecast weather rows: {len(prediction_frame[prediction_frame.index >= forecast_start]):,}")
 
     workflow, _ = create_future_openstef_xgboost_workflow(args.target)
-    workflow.fit(time_series_dataset(training_frame))
-    forecast = workflow.predict(time_series_dataset(prediction_frame), forecast_start=forecast_start)
+    with suppress_openstef_sklearn_nan_warnings():
+        workflow.fit(time_series_dataset(training_frame))
+        forecast = workflow.predict(time_series_dataset(prediction_frame), forecast_start=forecast_start)
 
     generated_at = datetime.now(timezone.utc)
     payload = api_payload(

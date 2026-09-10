@@ -8,7 +8,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 OUTPUT_DIR = (Path(__file__).resolve().parent / "../reports/forecast-runs").resolve()
 
@@ -35,36 +34,6 @@ SEASONS = {
     "summer": (6, 7, 8),
     "autumn": (9, 10, 11),
 }
-OUTPUT_COLUMNS = [
-    "target",
-    "slice",
-    "evidence_label",
-    "rank",
-    "model",
-    "model_family",
-    "weather_source",
-    "run_count",
-    "window_count",
-    "recommendation_status",
-    "selection_score",
-    "mae_component",
-    "rmse_component",
-    "daily_energy_component",
-    "bias_component",
-    "stability_component",
-    "mae_weight",
-    "rmse_weight",
-    "daily_energy_weight",
-    "bias_weight",
-    "stability_weight",
-    "median_mae_kwh",
-    "median_rmse_kwh",
-    "mean_bias_kwh",
-    "median_abs_bias_kwh",
-    "median_mean_abs_daily_energy_error_kwh",
-    "stability_cv_mae",
-    "diagnostics",
-]
 QUANTILE_METRIC_TOKENS = ("quantile", "p10", "p50", "p90", "crps", "winkler", "coverage")
 
 
@@ -93,10 +62,6 @@ class SelectionResult:
     median_mean_abs_daily_energy_error_kwh: float | None
     stability_cv_mae: float | None
     diagnostics: tuple[str, ...]
-
-    def as_row(self) -> dict[str, Any]:
-        return self.__dict__.copy()
-
 
 def read_metric_rows(paths: list[Path]) -> tuple[list[dict[str, str]], list[str]]:
     rows: list[dict[str, str]] = []
@@ -374,14 +339,12 @@ def write_outputs(
     weights: dict[str, float],
     current_slice: str,
     source_rows: list[dict[str, str]] | None = None,
-) -> tuple[Path, Path]:
+) -> Path:
     if not results:
         raise ValueError("No eligible model-selection results to write")
     output_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = timestamped_report_path(output_dir, "forecast-model-selection", suffix=".csv")
-    markdown_path = csv_path.with_suffix(".md")
+    markdown_path = timestamped_report_path(output_dir, "forecast-model-selection", suffix=".md")
     quantile_columns = detect_quantile_columns(source_rows or [])
-    write_csv(csv_path, results, weights)
     write_markdown(
         markdown_path,
         results,
@@ -391,7 +354,7 @@ def write_outputs(
         current_slice=current_slice,
         quantile_columns=quantile_columns,
     )
-    return csv_path, markdown_path
+    return markdown_path
 
 
 def detect_quantile_columns(rows: list[dict[str, str]]) -> list[str]:
@@ -399,19 +362,6 @@ def detect_quantile_columns(rows: list[dict[str, str]]) -> list[str]:
     for row in rows:
         columns.update(row)
     return sorted(column for column in columns if any(token in column.lower() for token in QUANTILE_METRIC_TOKENS))
-
-
-def write_csv(path: Path, results: list[SelectionResult], weights: dict[str, float]) -> None:
-    with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=OUTPUT_COLUMNS)
-        writer.writeheader()
-        for result in results:
-            row = result.as_row()
-            row["slice"] = result.slice_name
-            row["diagnostics"] = "; ".join(result.diagnostics)
-            for name, weight in weights.items():
-                row[f"{name}_weight"] = weight
-            writer.writerow({column: format_cell(row.get(column)) for column in OUTPUT_COLUMNS})
 
 
 def write_markdown(
@@ -570,7 +520,7 @@ def main(argv: list[str] | None = None) -> None:
     weights = parse_weights(args.weights)
     current_slice = slice_name(month=args.month, season=args.season, horizon=args.horizon)
     results = select_models(filtered, weights=weights, min_windows=args.min_windows, current_slice=current_slice)
-    csv_path, markdown_path = write_outputs(
+    markdown_path = write_outputs(
         Path(args.output_dir),
         results,
         input_paths=input_paths,
@@ -579,7 +529,6 @@ def main(argv: list[str] | None = None) -> None:
         current_slice=current_slice,
         source_rows=filtered,
     )
-    print(f"Wrote forecast model-selection CSV to {csv_path}")
     print(f"Wrote forecast model-selection report to {markdown_path}")
 
 

@@ -13,7 +13,6 @@ fi
 
 csv_directory="${ENERGY_IMPORT_DIRECTORY:-./quarkus/data/csv_Archiv}"
 measurement="${ENERGY_INFLUX_MEASUREMENT:-energy_values}"
-report_dir="${ENERGY_DATA_CHECK_REPORT_DIR:-./reports/data-check}"
 build_mode="${ENERGY_DATA_CHECK_BUILD:-auto}"
 wait_seconds="${INFLUX_WAIT_SECONDS:-60}"
 
@@ -43,17 +42,14 @@ fi
 : "${INFLUXDB_BUCKET:=energy}"
 export INFLUXDB_TOKEN INFLUXDB_ORG INFLUXDB_BUCKET
 
-mkdir -p "$report_dir"
 import_dir="$(realpath "$csv_directory")"
-report_dir_abs="$(realpath "$report_dir")"
 validation_temp_dir="$(mktemp -d)"
 trap 'rm -rf "$validation_temp_dir"' EXIT
 validation_report="$validation_temp_dir/energy-csv-validation-report.txt"
-overall_count_csv="$report_dir_abs/influx-energy-values-count.csv"
-breakdown_count_csv="$report_dir_abs/influx-energy-values-direction-category-count.csv"
-expected_file_counts_tsv="$report_dir_abs/expected-file-counts.tsv"
-file_count_dir="$report_dir_abs/influx-file-counts"
-
+overall_count_csv="$validation_temp_dir/influx-energy-values-count.csv"
+breakdown_count_csv="$validation_temp_dir/influx-energy-values-direction-category-count.csv"
+expected_file_counts_tsv="$validation_temp_dir/expected-file-counts.tsv"
+file_count_dir="$validation_temp_dir/influx-file-counts"
 wait_for_influx() {
   local attempts
   attempts=0

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import math
 import sys
 from collections import defaultdict
@@ -192,9 +191,9 @@ def write_metric_table_files(output_dir: Path, target: str, rows: list[dict[str,
     require_rows(rows)
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = f"{target}-{'all-saved-' if all_saved else ''}forecast-metric-table"
-    csv_path = timestamped_report_path(output_dir, stem, suffix=".csv")
-    write_csv(csv_path, rows)
-    return csv_path
+    markdown_path = timestamped_report_path(output_dir, stem, suffix=".md")
+    write_markdown_table(markdown_path, f"{target.title()} Forecast Metric Table", rows, TABLE_COLUMNS)
+    return markdown_path
 
 
 def aggregate_metric_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -227,21 +226,16 @@ def write_aggregate_metric_files(output_dir: Path, target: str, rows: list[dict[
     aggregates = aggregate_metric_rows(rows)
     require_rows(aggregates)
     stem = f"{target}-{'all-saved-' if all_saved else ''}forecast-aggregate-metrics"
-    csv_path = timestamped_report_path(output_dir, stem, suffix=".csv")
-    write_csv_for_columns(csv_path, aggregates, AGGREGATE_COLUMNS)
-    return csv_path
+    markdown_path = timestamped_report_path(output_dir, stem, suffix=".md")
+    write_markdown_table(markdown_path, f"{target.title()} Forecast Aggregate Metrics", aggregates, AGGREGATE_COLUMNS)
+    return markdown_path
 
 
-def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    write_csv_for_columns(path, rows, TABLE_COLUMNS)
-
-
-def write_csv_for_columns(path: Path, rows: list[dict[str, Any]], columns: list[str]) -> None:
-    with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=columns)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({column: format_csv_cell(row.get(column)) for column in columns})
+def write_markdown_table(path: Path, title: str, rows: list[dict[str, Any]], columns: list[str]) -> None:
+    lines = [f"# {title}", "", "| " + " | ".join(columns) + " |", "|" + "|".join("---" for _ in columns) + "|"]
+    for row in rows:
+        lines.append("| " + " | ".join(format_markdown_cell(row.get(column)) for column in columns) + " |")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def numeric_values(rows: list[dict[str, Any]], column: str) -> list[float]:
@@ -276,12 +270,12 @@ def first_present(rows: list[dict[str, Any]], column: str) -> object:
     return None
 
 
-def format_csv_cell(value: object) -> str:
+def format_markdown_cell(value: object) -> str:
     if value is None:
         return ""
     if isinstance(value, float):
         return f"{value:.6g}"
-    return str(value)
+    return str(value).replace("|", "\\|")
 
 
 def require_rows(rows: list[dict[str, Any]]) -> None:
@@ -323,21 +317,21 @@ def main(argv: list[str] | None = None) -> None:
         timeout_seconds=TIMEOUT_SECONDS,
         require_complete=args.require_complete,
     )
-    csv_path = write_metric_table_files(
+    markdown_path = write_metric_table_files(
         Path(args.output_dir),
         args.target,
         rows,
         all_saved=args.all_saved,
     )
-    print(f"Wrote forecast metric CSV to {csv_path}")
+    print(f"Wrote forecast metric report to {markdown_path}")
     if args.aggregate:
-        aggregate_csv_path = write_aggregate_metric_files(
+        aggregate_markdown_path = write_aggregate_metric_files(
             Path(args.output_dir),
             args.target,
             rows,
             all_saved=args.all_saved,
         )
-        print(f"Wrote forecast aggregate CSV to {aggregate_csv_path}")
+        print(f"Wrote forecast aggregate report to {aggregate_markdown_path}")
 
 
 if __name__ == "__main__":

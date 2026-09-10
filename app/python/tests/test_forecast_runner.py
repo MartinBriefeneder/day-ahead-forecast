@@ -1,8 +1,16 @@
 import unittest
+import warnings
 
 import pandas as pd
 
-from forecast_runner import FORECAST_WEATHER_FEATURES, metric_items, none_if_nan, openstef_weather_config_kwargs, resolve_forecast_window
+from forecast_runner import (
+    FORECAST_WEATHER_FEATURES,
+    metric_items,
+    none_if_nan,
+    openstef_weather_config_kwargs,
+    resolve_forecast_window,
+    suppress_openstef_sklearn_nan_warnings,
+)
 
 
 class ForecastRunnerTest(unittest.TestCase):
@@ -63,6 +71,22 @@ class ForecastRunnerTest(unittest.TestCase):
             [{"name": "mae_kwh", "value": 0.5}],
             metric_items({"mae_kwh": 0.5, "missing": pd.NA, "note": "ignored"}),
         )
+
+    def test_suppresses_only_openstef_sklearn_nan_warning(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with suppress_openstef_sklearn_nan_warnings():
+                warnings.warn_explicit(
+                    "invalid value encountered in divide",
+                    RuntimeWarning,
+                    "extmath.py",
+                    1144,
+                    module="sklearn.utils.extmath",
+                )
+                warnings.warn("other warning", RuntimeWarning)
+
+        self.assertEqual(1, len(caught))
+        self.assertEqual("other warning", str(caught[0].message))
 
 
 if __name__ == "__main__":

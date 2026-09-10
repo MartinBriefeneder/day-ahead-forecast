@@ -133,7 +133,8 @@ class RollingBacktestTest(unittest.TestCase):
 
             text = path.read_text(encoding="utf-8")
 
-        self.assertIn("diagnostic", text)
+        self.assertEqual(".md", path.suffix)
+        self.assertIn("Diagnostics", text)
 
 
 if __name__ == "__main__":

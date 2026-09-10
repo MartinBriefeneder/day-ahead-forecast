@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+import warnings
 
 import pandas as pd
 
@@ -51,6 +53,18 @@ def format_utc(value: datetime) -> str:
 def log_step(message: str) -> None:
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     print(f"[forecast-python] {timestamp} {message}", flush=True)
+
+
+@contextmanager
+def suppress_openstef_sklearn_nan_warnings():
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="invalid value encountered in divide",
+            category=RuntimeWarning,
+            module=r"sklearn\.utils\.extmath",
+        )
+        yield
 
 
 def run_id_for_model(target: str, model: str, forecast_start: datetime, forecast_end: datetime) -> str:

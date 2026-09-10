@@ -125,7 +125,7 @@ class ModelSelectionTest(unittest.TestCase):
         self.assertEqual([], rows)
         self.assertTrue(any("missing required columns" in diagnostic for diagnostic in diagnostics))
 
-    def test_write_outputs_writes_csv_and_markdown_with_sources(self):
+    def test_write_outputs_writes_markdown_with_sources(self):
         rows = [
             metric_row("generation", "model-a", "2025-10-01T00:00:00Z", 1, 2, 0.1, 3),
             metric_row("generation", "model-a", "2025-10-08T00:00:00Z", 1, 2, 0.1, 3),
@@ -135,7 +135,7 @@ class ModelSelectionTest(unittest.TestCase):
         results = select_models(rows)
         with TemporaryDirectory() as directory:
             input_path = Path(directory) / "metrics.csv"
-            csv_path, markdown_path = write_outputs(
+            markdown_path = write_outputs(
                 Path(directory),
                 results,
                 input_paths=[input_path],
@@ -145,18 +145,15 @@ class ModelSelectionTest(unittest.TestCase):
                 source_rows=[{**rows[0], "crps": "1.2"}],
             )
 
-            self.assertTrue(csv_path.exists())
             self.assertTrue(markdown_path.exists())
+            self.assertEqual([], list(Path(directory).glob("forecast-model-selection-*.csv")))
             markdown = markdown_path.read_text(encoding="utf-8")
-            with csv_path.open(encoding="utf-8", newline="") as file:
-                output_rows = list(csv.DictReader(file))
 
             self.assertIn("Source Traceability", markdown)
             self.assertIn("https://otexts.com/fpp3/tscv.html", markdown)
             self.assertIn("`crps`", markdown)
-            self.assertIn("mae_weight", output_rows[0])
-            self.assertEqual("full-period", output_rows[0]["slice"])
-            self.assertEqual("1", output_rows[0]["rank"])
+            self.assertIn("Evaluation slice: `full-period`", markdown)
+            self.assertIn("| generation | 1 | `model-a` |", markdown)
 
 
 if __name__ == "__main__":
