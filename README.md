@@ -12,11 +12,7 @@ git clone <repo-url> day-ahead-forecast
 cd day-ahead-forecast/app
 ./run-server.sh
 ./reset-and-import-data.sh
-docker compose --profile forecasts run --rm forecast-runner \
-  --base-url http://forecast-backend:8080 \
-  --target all \
-  --forecast-start 2025-10-01T00:00:00Z \
-  --forecast-days 7
+./forecast-next-week.sh
 ```
 
 This creates one week of saved generation and consumption forecasts.
@@ -63,6 +59,22 @@ Useful options:
 ./run-forecasts.sh --target generation
 ./run-forecasts.sh --target consumption
 ./run-forecasts.sh --forecast-days 7
+```
+
+To forecast the coming week with Docker:
+
+```sh
+cd app
+./forecast-next-week.sh
+```
+
+This runs:
+
+```sh
+docker compose --profile forecasts run --rm forecast-runner \
+  --base-url http://forecast-backend:8080 \
+  --target all \
+  --forecast-days 7
 ```
 
 ## Run The Fixed Demo Suite
